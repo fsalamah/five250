@@ -1,0 +1,11 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+recorded,1,key,,TAB,
+recorded,2,key,,ENTER,
+recorded,3,key,,ENTER,
+recorded,4,key,,ENTER,
+recorded,5,key,,F3,
+recorded,6,key,,F3,
+recorded,7,key,,F3,
+recorded,8,key,,F12,
+recorded,9,key,,ENTER,

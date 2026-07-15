@@ -130,18 +130,29 @@ public final class SessionService {
 
                 // Real-terminal-fidelity GUI typing: characters land wherever the cursor
                 // currently is (tn5250j's own keyboard semantics), not a pre-selected field.
-                // NOTE: not currently hooked into recording (see "type"/"key" above) — a
-                // recording made while using immersive/character typing will not capture
-                // keystrokes sent this way, only whole-field type/key actions. Known gap.
                 case "sendtext": {
-                    Terminal t = getSession(sessionId(req));
-                    t.sendText(str(req, "text", ""));
-                    return ok(t.snapshot());
+                    String sid = sessionId(req);
+                    Terminal t = getSession(sid);
+                    String text = str(req, "text", "");
+                    int[] before = t.cursor();
+                    t.sendText(text);
+                    Map<String, Object> resp = ok(t.snapshot());
+                    RecordingState rec = recordings.get(sid);
+                    if (rec != null && !text.isEmpty()) {
+                        resp.put("recordedRow", rec.appendTypedChar(before[0], before[1], text, t));
+                    }
+                    return resp;
                 }
 
                 case "setcursor": {
-                    Terminal t = getSession(sessionId(req));
+                    String sid = sessionId(req);
+                    Terminal t = getSession(sid);
                     t.setCursor((int) num(req, "row", 1), (int) num(req, "col", 1));
+                    RecordingState rec = recordings.get(sid);
+                    // A click just repositions the cursor ahead of typing — not a CSV action by
+                    // itself, but it does end whatever typed run was in progress, so the next
+                    // character starts a fresh row anchored at the new position.
+                    if (rec != null) rec.endTypedRun();
                     return ok(t.snapshot());
                 }
 

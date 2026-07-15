@@ -138,6 +138,12 @@ public final class Terminal {
         screen.sendKeys(text);
     }
 
+    /** Current cursor position as {row, col}, 1-based — cheap, no full snapshot needed. */
+    public synchronized int[] cursor() {
+        requireConnected();
+        return new int[]{screen.getCurrentRow(), screen.getCurrentCol()};
+    }
+
     /**
      * Moves the real cursor to an exact position, for click-to-place-cursor in the GUI.
      * screen.setCursor() uses the same coordinate convention as getCurrentRow()/getCurrentCol()

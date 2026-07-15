@@ -19,6 +19,20 @@ directory (override with `FIVE250_HOME` if you want data elsewhere). Copy
 `scenarios/` anywhere and it works unchanged — verified live by running it
 from a completely unrelated directory.
 
+**Dev-tree gotcha, learned the hard way**: running `java -jar target/five250.jar
+...` (the natural thing to do after `mvn package`, straight from the source
+tree) means `Home.DIR` resolves to `target/`, NOT the project root — so the
+daemon silently reads and writes `target/scenarios/`, a build artifact
+directory `mvn clean` deletes, completely separate from the git-tracked
+`scenarios/` next to `pom.xml`. `Csv.read()` returns an empty list for a
+missing file with no error, so a suite silently runs "0 scenarios" instead of
+failing loudly — and worse, anything recorded live (via the GUI's Record
+feature) lands in `target/scenarios/`, invisible to git, at risk of being
+deleted by the next clean build. When iterating in the dev tree, always
+launch with `FIVE250_HOME=<project root> java -jar target/five250.jar ...`,
+or copy the built jar up to the project root first (matching how the actual
+packaged distribution is laid out — jar and `scenarios/` as siblings).
+
 **CI / headless**: `five250 run-suite --flow F --file N [--var NAME=VALUE ...]`
 drives a suite exactly like clicking Run All, prints each step + PASS/FAIL,
 and exits 0/1/2/3 (pass/fail/run-error/timeout) — a real CI gate. `--var`
