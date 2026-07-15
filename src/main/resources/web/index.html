@@ -101,6 +101,12 @@
     background: #223049; color: #eafff0; border: none; outline: 1px solid var(--accent);
     padding: 0; margin: 0; border-radius: 2px; caret-color: #eafff0;
   }
+  #btnImmersive.active { background: var(--accent); border-color: var(--accent); color: white; }
+  body.immersive header .tabs, body.immersive header h1, body.immersive .panel:not(#terminalScreenPanel) { display: none; }
+  body.immersive main { max-width: none; padding: 8px; }
+  body.immersive #terminalScreenPanel { margin-bottom: 0; }
+  body.immersive #screen { font-size: 16px; min-height: 70vh; }
+  body.immersive header { padding: 6px 12px; }
 </style>
 </head>
 <body>
@@ -126,6 +132,7 @@
         <label><input type="checkbox" id="ssl"> SSL</label>
         <button class="primary" id="btnConnect">Connect</button>
         <button class="danger" id="btnDisconnect">Disconnect</button>
+        <button id="btnImmersive" title="Full keyboard fidelity: arrow keys move the cursor field-to-field, fullscreen, browser shortcuts suppressed">⛶ Immersive</button>
       </div>
       <div class="row">
         <label>User</label><input id="user" autocomplete="off" style="width:120px">
@@ -147,8 +154,8 @@
       <table id="recordTable"><thead><tr><th>Case</th><th>Step</th><th>Action</th><th>Target</th><th>Value</th><th>Expected</th></tr></thead><tbody></tbody></table>
     </div>
 
-    <div class="panel">
-      <h2>Screen</h2>
+    <div class="panel" id="terminalScreenPanel">
+      <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ⛶ Immersive again to also turn off keyboard capture.</span></h2>
       <div id="screen">(not connected)</div>
       <div id="oiaLine"></div>
     </div>
@@ -652,6 +659,46 @@ function renderScreen(resp) {
   }
 }
 
+// ---------- immersive mode: fullscreen + arrow-key field-to-field navigation ----------
+let immersiveMode = false;
+
+function nearestFieldInRow(rowFields, col) {
+  return rowFields.slice().sort((a, b) => Math.abs(a.col - col) - Math.abs(b.col - col))[0];
+}
+
+// Real 5250 arrow keys move a free character cursor; this codebase only knows field boundaries
+// (no per-character cursor RPC), so arrows approximate it by jumping to the nearest field in the
+// adjacent row (Up/Down) or the previous/next field (Left/Right at a field's edge) — the closest
+// fidelity achievable without a raw cursor-move endpoint.
+function arrowField(row, col, dir) {
+  if (!editableFields.length) return null;
+  if (dir === "left") return adjacentEditableField(row, col, -1);
+  if (dir === "right") return adjacentEditableField(row, col, 1);
+  const rows = [...new Set(editableFields.map(f => f.row))].sort((a, b) => a - b);
+  let targetRow;
+  if (dir === "down") targetRow = rows.find(r => r > row);
+  else targetRow = rows.slice().reverse().find(r => r < row);
+  if (targetRow === undefined) targetRow = dir === "down" ? rows[0] : rows[rows.length - 1]; // wrap around
+  return nearestFieldInRow(editableFields.filter(f => f.row === targetRow), col);
+}
+
+async function setImmersive(on) {
+  immersiveMode = on;
+  document.body.classList.toggle("immersive", on);
+  $("btnImmersive").classList.toggle("active", on);
+  $("immersiveHint").style.display = on ? "" : "none";
+  if (on) {
+    try { await document.documentElement.requestFullscreen(); } catch (e) { /* denied or unsupported — capture still works, just not fullscreen */ }
+  } else if (document.fullscreenElement) {
+    try { await document.exitFullscreen(); } catch (e) {}
+  }
+}
+
+$("btnImmersive").addEventListener("click", () => setImmersive(!immersiveMode));
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && immersiveMode) setImmersive(false); // browser-driven exit (Esc) — mirror it in our own state
+});
+
 // ---------- keyboard capture: block the browser's own shortcuts for Tab/Enter/F-keys/paging
 // while on the Terminal tab, and route them into the 5250 session instead. Browsers reserve a
 // handful of combos (F11 fullscreen, F12 devtools, Ctrl+W/T/N tab & window management, and in
@@ -659,6 +706,22 @@ function renderScreen(resp) {
 // intercept those; everything else below is captured. ----------
 document.addEventListener("keydown", (e) => {
   if (!terminalTabActive() || !$("status").classList.contains("connected")) return;
+
+  if (immersiveMode && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+    const cur = activeField;
+    // Left/Right inside a field with room left to move the caret: let the browser do it natively.
+    if (cur && e.key === "ArrowLeft" && cur.inputEl.selectionStart > 0) return;
+    if (cur && e.key === "ArrowRight" && cur.inputEl.selectionStart < cur.inputEl.value.length) return;
+    e.preventDefault();
+    const dir = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+    const from = cur || editableFields[0];
+    if (!from) return;
+    Promise.resolve(cur ? commitActiveField() : null).then(() => {
+      const target = arrowField(from.row, from.col, dir);
+      if (target) activateField(target.row, target.col, { noSelect: true });
+    });
+    return;
+  }
 
   if (e.key === "Tab") {
     e.preventDefault();
