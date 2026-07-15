@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>five250</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #2a2f3a; --text: #d8dee9;
+    --muted: #7a8296; --accent: #4f9dff; --green: #34c759; --red: #ff5c5c;
+    --mono: "Cascadia Code","Consolas","IBM Plex Mono",monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .tabs { display: flex; gap: 4px; margin-left: 24px; }
+  header button.tab { background: none; border: none; color: var(--muted); padding: 8px 14px; cursor: pointer; border-radius: 6px; font-size: 14px; }
+  header button.tab.active { background: var(--accent); color: white; }
+  header .status { margin-left: auto; font-size: 12px; color: var(--muted); }
+  header .status.connected { color: var(--green); }
+  main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+  section.view { display: none; }
+  section.view.active { display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  label { font-size: 12px; color: var(--muted); }
+  input, select { background: #0b0d12; border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 5px; font-size: 13px; }
+  input[type=checkbox] { width: auto; }
+  button { background: #232838; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.danger { background: #3a1f22; border-color: #5c2b30; color: #ff9b9b; }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  #screen { font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #05060a; color: #6ee06e; padding: 12px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); min-height: 340px; }
+  #oiaLine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 2px; }
+  td input:focus { background: #0b0d12; border-radius: 3px; }
+  .pass { color: var(--green); font-weight: 600; }
+  .fail { color: var(--red); font-weight: 600; }
+  .keypad { display: flex; flex-wrap: wrap; gap: 6px; }
+  pre.dump { background: #05060a; padding: 8px; border-radius: 5px; font-size: 11px; max-height: 200px; overflow: auto; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel); border: 1px solid var(--border); padding: 10px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  .project { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
+  .filelist { position: sticky; top: 16px; }
+  .filemain { min-width: 0; }
+  #fileList { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+  .file-item { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .file-item:hover { background: #1e2330; }
+  .file-item.active { background: #223049; }
+  .file-item .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-item .fcount { color: var(--muted); font-size: 11px; }
+  .file-item .frename { opacity: 0; border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+  .file-item:hover .frename { opacity: 1; }
+  .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
+  .ac-dropdown { position: fixed; z-index: 500; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; max-height: 280px; overflow-y: auto; box-shadow: 0 12px 28px rgba(0,0,0,.5); }
+  .ac-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #1c2029; }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item.active, .ac-item:hover { background: #223049; }
+  .ac-item .ac-name { font-family: var(--mono); color: var(--accent); font-weight: 600; font-size: 13px; }
+  .ac-item .ac-desc { color: var(--muted); font-size: 11px; margin-top: 1px; white-space: normal; }
+
+  .docs-panel { background: #0b0d12; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-top: 8px; }
+  .docs-panel .docs-name { font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 13px; }
+  .docs-panel .docs-syntax { font-family: var(--mono); color: #8fe6a8; margin: 5px 0; white-space: pre-wrap; }
+  .docs-panel .docs-desc { color: var(--text); margin-bottom: 6px; line-height: 1.4; }
+  .docs-panel .docs-params div { margin: 3px 0; color: var(--text); }
+  .docs-panel .docs-params b { color: var(--muted); font-family: var(--mono); }
+  .docs-empty { color: var(--muted); font-style: italic; }
+
+  .replay-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 1000; align-items: center; justify-content: center; }
+  .replay-backdrop.show { display: flex; }
+  .replay-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; width: min(900px, 92vw); max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  #replayScreen { font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #05060a; color: #6ee06e; padding: 12px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); }
+  .replay-link { background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 12px; padding: 0; }
+
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; background: #2a2f3a; color: var(--muted); }
+  .badge.connected { background: #143a22; color: var(--green); }
+  .badge.disconnected { background: #3a1f22; color: #ff9b9b; }
+  #runningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #05060a; color: #6ee06e; padding: 10px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
+  #btnRecordToggle.active { background: var(--red); border-color: var(--red); color: white; animation: recordPulse 1.5s ease-in-out infinite; }
+  @keyframes recordPulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>five250</h1>
+  <div class="tabs">
+    <button class="tab active" data-view="terminal">Terminal</button>
+    <button class="tab" data-view="scenarios">Scenarios</button>
+  </div>
+  <div class="status" id="status">not connected</div>
+</header>
+
+<main>
+
+  <section class="view active" id="view-terminal">
+    <div class="panel">
+      <h2>Connection</h2>
+      <div class="row">
+        <label>Session</label><input id="sessionId" autocomplete="off" value="default" style="width:90px">
+        <label>Host</label><input id="host" autocomplete="off" value="pub400.com" style="width:150px">
+        <label>Port</label><input id="port" autocomplete="off" value="23" style="width:60px">
+        <label><input type="checkbox" id="ssl"> SSL</label>
+        <button class="primary" id="btnConnect">Connect</button>
+        <button class="danger" id="btnDisconnect">Disconnect</button>
+      </div>
+      <div class="row">
+        <label>User</label><input id="user" autocomplete="off" style="width:120px">
+        <label>Password</label><input id="pass" autocomplete="off" type="password" style="width:120px">
+        <button id="btnSignon">Sign On</button>
+      </div>
+      <div class="row">
+        <button id="btnRecordToggle">● Record</button>
+        <span id="recordStatus" class="muted"></span>
+        <button class="small" id="btnRecordCheck" style="display:none">+ Check current screen</button>
+        <button class="small" id="btnRecordExtract" style="display:none">+ Extract from screen</button>
+        <button class="primary small" id="btnRecordSave" style="display:none">Save as suite…</button>
+        <button class="danger small" id="btnRecordDiscard" style="display:none">Discard</button>
+      </div>
+    </div>
+
+    <div class="panel" id="recordPanel" style="display:none">
+      <h2>Recorded steps</h2>
+      <table id="recordTable"><thead><tr><th>Case</th><th>Step</th><th>Action</th><th>Target</th><th>Value</th><th>Expected</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Screen</h2>
+      <div id="screen">(not connected)</div>
+      <div id="oiaLine"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Type into a field</h2>
+      <div class="row">
+        <label>Label</label><input id="typeLabel" autocomplete="off" placeholder="e.g. User" style="width:160px">
+        <span class="muted">or</span>
+        <label>Row</label><input id="typeRow" autocomplete="off" style="width:50px">
+        <label>Col</label><input id="typeCol" autocomplete="off" style="width:50px">
+        <label>Value</label><input id="typeValue" style="width:220px" autocomplete="off" placeholder="e.g. WRKACTJOB">
+        <button class="primary" id="btnType">Type</button>
+      </div>
+      <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Start typing a CL command in Value for suggestions and docs.</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Send key</h2>
+      <div class="keypad" id="keypad"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-scenarios">
+    <div class="row" style="margin-bottom:12px">
+      <label>Flow</label><select id="flowSelect" style="min-width:160px"></select>
+      <span class="muted" id="flowDesc"></span>
+    </div>
+
+    <div class="project">
+      <aside class="panel filelist">
+        <h2>Scenario files</h2>
+        <div class="row" style="margin-bottom:8px">
+          <input id="newFileName" autocomplete="off" placeholder="new file name" style="flex:1">
+          <button class="primary small" id="btnNewFile">+ New</button>
+        </div>
+        <div id="fileList"></div>
+      </aside>
+
+      <div class="filemain">
+        <div class="panel">
+          <div class="row" style="justify-content:space-between">
+            <h2 style="margin:0" id="currentFileTitle">No file selected</h2>
+            <div class="row" style="margin:0">
+              <label>Run against session</label><input id="scenarioSession" autocomplete="off" value="default" style="width:90px">
+              <span id="sessionBadge" class="badge">checking…</span>
+              <label><input type="checkbox" id="headless"> Headless</label>
+              <button id="btnAddRow">+ Row</button>
+              <button id="btnSaveScenarios">Save</button>
+              <button class="primary" id="btnRunScenarios">Run All</button>
+              <button class="danger small" id="btnDeleteFile">Delete file</button>
+            </div>
+          </div>
+          <table id="scenarioTable"><thead></thead><tbody></tbody></table>
+          <div class="docs-panel" id="scenarioDocsPanel"><div class="docs-empty">Click a "command" cell and start typing for CL command suggestions and docs.</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="row" style="justify-content:space-between; margin-bottom:0">
+            <h2 style="margin:0">Variables <span class="muted" style="text-transform:none;font-weight:normal">— use ${NAME} in any cell above</span></h2>
+            <div class="row" style="margin:0">
+              <button class="small" id="btnAddVar">+ Variable</button>
+              <button class="small" id="btnSaveVars">Save</button>
+            </div>
+          </div>
+          <table id="varsTable"><thead><tr><th>Name</th><th>Value</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <div class="panel" id="runningPanel" style="display:none">
+          <h2>Running…</h2>
+          <div id="runningProgress" class="muted" style="margin-bottom:8px"></div>
+          <div id="runningCurrent" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div id="runningScreen">(waiting for screen…)</div>
+        </div>
+
+        <div class="panel" id="resultsPanel" style="display:none">
+          <h2>Results</h2>
+          <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
+          <table id="resultsTable"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="replay-backdrop" id="replayBackdrop">
+  <div class="replay-modal">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <h2 style="margin:0" id="replayTitle">Replay</h2>
+      <button class="small" id="replayClose">✕ Close</button>
+    </div>
+    <div id="replayLabel" class="muted" style="margin-bottom:8px"></div>
+    <div id="replayScreen"></div>
+    <div class="row" style="justify-content:center; margin-top:12px">
+      <button id="replayPrev">◂ Prev</button>
+      <span id="replayCounter" class="muted" style="min-width:80px; text-align:center"></span>
+      <button id="replayNext">Next ▸</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEYS = ["ENTER","F3","F12","PAGE_UP","PAGE_DOWN","TAB","CLEAR","HELP",
+  "F1","F2","F4","F5","F6","F7","F8","F9","F10","F11","F13","F14","F15","F16",
+  "F17","F18","F19","F20","F21","F22","F23","F24","PA1","PA2","PA3"];
+
+function $(id) { return document.getElementById(id); }
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---------- CL command autocomplete + docs (IDE-style) ----------
+let CL_COMMANDS = [];
+fetch("/cl-commands.json").then(r => r.json()).then(cmds => { CL_COMMANDS = cmds; });
+
+function renderCommandDocs(panel, cmd) {
+  if (!panel) return;
+  if (!cmd) { panel.innerHTML = '<div class="docs-empty">Start typing a CL command for suggestions and docs.</div>'; return; }
+  const params = (cmd.params || []).map(p => `<div><b>${p.name}</b> — ${p.description}</div>`).join("");
+  panel.innerHTML = `
+    <div class="docs-name">${cmd.name}</div>
+    <div class="docs-syntax">${cmd.syntax}</div>
+    <div class="docs-desc">${cmd.description}</div>
+    ${params ? '<div class="docs-params">' + params + '</div>' : ""}`;
+}
+
+/** Attaches type-ahead suggestions + a live docs panel to a text input, IDE-style. */
+function attachCommandAutocomplete(input, docsPanel) {
+  let dropdown = null, items = [], activeIndex = -1;
+
+  function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
+
+  function setActive(i) {
+    if (!dropdown) return;
+    [...dropdown.children].forEach((el, idx) => el.classList.toggle("active", idx === i));
+    activeIndex = i;
+    if (items[i]) renderCommandDocs(docsPanel, items[i]);
+  }
+
+  function selectCommand(cmd) {
+    input.value = cmd.name + " ";
+    closeDropdown();
+    renderCommandDocs(docsPanel, cmd);
+    input.focus();
+  }
+
+  function showDropdown(matches) {
+    closeDropdown();
+    if (!matches.length) return;
+    dropdown = document.createElement("div");
+    dropdown.className = "ac-dropdown";
+    const rect = input.getBoundingClientRect();
+    dropdown.style.left = rect.left + "px";
+    dropdown.style.top = (rect.bottom + 2) + "px";
+    dropdown.style.width = Math.max(rect.width, 280) + "px";
+    matches.forEach(cmd => {
+      const item = document.createElement("div");
+      item.className = "ac-item";
+      item.innerHTML = `<div class="ac-name">${cmd.name}</div><div class="ac-desc">${cmd.description}</div>`;
+      item.addEventListener("mousedown", e => { e.preventDefault(); selectCommand(cmd); });
+      item.addEventListener("mouseenter", () => setActive(items.indexOf(cmd)));
+      dropdown.appendChild(item);
+    });
+    document.body.appendChild(dropdown);
+    items = matches;
+    activeIndex = -1;
+  }
+
+  input.addEventListener("input", () => {
+    const verb = input.value.trim().split(/\s+/)[0].toUpperCase();
+    if (!verb) { closeDropdown(); renderCommandDocs(docsPanel, null); return; }
+    const exact = CL_COMMANDS.find(c => c.name === verb);
+    const matches = CL_COMMANDS.filter(c => c.name.startsWith(verb) && c.name !== verb).slice(0, 10);
+    if (exact) matches.unshift(exact);
+    showDropdown(matches);
+    renderCommandDocs(docsPanel, exact || null);
+  });
+
+  input.addEventListener("keydown", e => {
+    if (!dropdown) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive(Math.min(activeIndex + 1, items.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(activeIndex - 1, 0)); }
+    else if (e.key === "Enter" || e.key === "Tab") {
+      if (activeIndex >= 0 && items[activeIndex]) { e.preventDefault(); selectCommand(items[activeIndex]); }
+      else closeDropdown();
+    } else if (e.key === "Escape") { closeDropdown(); }
+  });
+
+  input.addEventListener("blur", () => setTimeout(closeDropdown, 150));
+}
+
+// ---------- tabs ----------
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", async () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    btn.classList.add("active");
+    $("view-" + btn.dataset.view).classList.add("active");
+    if (btn.dataset.view === "terminal") {
+      await refreshHeaderStatus();
+      if ($("status").classList.contains("connected")) {
+        try { renderScreen(await rpc("screen")); } catch (e) {}
+      }
+    }
+  });
+});
+
+// ---------- rpc ----------
+async function rpc(cmd, extra) {
+  const body = Object.assign({ cmd, sessionId: $("sessionId").value || "default" }, extra || {});
+  const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify(body) });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); throw new Error(json.error); }
+  if (json.recordedRow) addRecordedRowToTable(json.recordedRow);
+  return json;
+}
+
+// ---------- recording ----------
+let isRecording = false;
+let pendingRecordedRows = [];
+
+function addRecordedRowToTable(row) {
+  const tbody = document.querySelector("#recordTable tbody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${row.case}</td><td>${row.step}</td><td>${row.action}</td>
+    <td>${row.target}</td><td>${row.value}</td><td>${row.expected}</td>`;
+  tbody.appendChild(tr);
+  $("recordPanel").style.display = "block";
+}
+
+// Three states, not two: "idle" (nothing to save), "recording" (actively capturing —
+// record-mark-check/extract work), "stopped" (capture ended, but rows are still pending —
+// Save/Discard must stay available until one of them is actually clicked).
+let recordMode = "idle";
+
+function setRecordingUI(mode) {
+  recordMode = mode;
+  isRecording = mode === "recording";
+  $("btnRecordToggle").textContent = mode === "recording" ? "■ Stop Recording" : "● Record";
+  $("btnRecordToggle").classList.toggle("active", mode === "recording");
+  $("recordStatus").textContent = mode === "recording" ? "recording every Type/Key..."
+    : mode === "stopped" ? "stopped — Save as suite, or Discard" : "";
+  $("btnRecordCheck").style.display = mode === "recording" ? "inline-block" : "none";
+  $("btnRecordExtract").style.display = mode === "recording" ? "inline-block" : "none";
+  $("btnRecordSave").style.display = mode === "idle" ? "none" : "inline-block";
+  $("btnRecordDiscard").style.display = mode === "idle" ? "none" : "inline-block";
+}
+
+$("btnRecordToggle").addEventListener("click", async () => {
+  if (recordMode !== "recording") {
+    if (!$("status").classList.contains("connected")) {
+      toast("Tip: start recording BEFORE connecting to also capture the connect step, or connect first for a suite that assumes an existing session.");
+    }
+    document.querySelector("#recordTable tbody").innerHTML = "";
+    await rpc("record-start", { case: "recorded" });
+    setRecordingUI("recording");
+    toast("Recording started");
+  } else {
+    // Actually stop server-side capture NOW, not when Save is eventually clicked — otherwise
+    // anything done between "Stop" and "Save" would keep silently recording underneath,
+    // contradicting what the button says.
+    try {
+      const stopRes = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "record-stop", sessionId: $("sessionId").value || "default" }) });
+      const stopJson = await stopRes.json();
+      if (!stopJson.ok) { toast("Error: " + stopJson.error); return; }
+      pendingRecordedRows = stopJson.rows;
+      setRecordingUI("stopped");
+      toast("Recording stopped — Save as suite, or Discard");
+    } catch (e) { toast("Error: " + e.message); }
+  }
+});
+
+$("btnRecordCheck").addEventListener("click", async () => {
+  const target = prompt('Check target: "message", "row:N", or a label, e.g. "label:Status"', "message");
+  if (!target) return;
+  const expected = prompt("Expected text (substring match):", "");
+  if (expected === null) return;
+  try { await rpc("record-mark-check", { target, expected }); toast("Check recorded"); } catch (e) {}
+});
+
+$("btnRecordExtract").addEventListener("click", async () => {
+  const target = prompt('Extract target: "row:N", or a label, e.g. "label:Balance"', "");
+  if (!target) return;
+  const name = prompt("Output field name for this value:", "");
+  if (!name) return;
+  try { await rpc("record-mark-extract", { target, name }); toast("Extract recorded"); } catch (e) {}
+});
+
+$("btnRecordSave").addEventListener("click", async () => {
+  const fileName = prompt("Save as scenario file (custom-steps flow), name:", "");
+  if (!fileName) return;
+  try {
+    // If Save is clicked while still actively recording (didn't click Stop first), stop now.
+    let rows = pendingRecordedRows;
+    if (recordMode === "recording") {
+      const stopRes = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "record-stop", sessionId: $("sessionId").value || "default" }) });
+      const stopJson = await stopRes.json();
+      if (!stopJson.ok) { toast("Error: " + stopJson.error); return; }
+      rows = stopJson.rows;
+    }
+    if (!rows || !rows.length) { toast("Nothing recorded yet"); return; }
+
+    await fetch("/api/scenario-files", { method: "POST", body: JSON.stringify({ flow: "custom-steps", name: fileName }) });
+    const putRes = await fetch(`/api/scenarios?flow=custom-steps&file=${encodeURIComponent(fileName)}`,
+      { method: "PUT", body: JSON.stringify(rows) });
+    const putJson = await putRes.json();
+    if (!putJson.ok) { toast("Error saving: " + putJson.error); return; }
+
+    toast(`Saved ${putJson.count} rows to custom-steps/${fileName}`);
+    pendingRecordedRows = [];
+    document.querySelector("#recordTable tbody").innerHTML = "";
+    $("recordPanel").style.display = "none";
+    setRecordingUI("idle");
+    document.querySelector('.tab[data-view="scenarios"]').click();
+    await new Promise(r => setTimeout(r, 50));
+    $("flowSelect").value = "custom-steps";
+    $("flowSelect").dispatchEvent(new Event("change"));
+    await new Promise(r => setTimeout(r, 200));
+    await selectFile(fileName);
+  } catch (e) { toast("Error: " + e.message); }
+});
+
+$("btnRecordDiscard").addEventListener("click", async () => {
+  if (!confirm("Discard the current recording?")) return;
+  if (recordMode === "recording") {
+    try { await rpc("record-discard"); } catch (e) {}
+  }
+  pendingRecordedRows = [];
+  document.querySelector("#recordTable tbody").innerHTML = "";
+  $("recordPanel").style.display = "none";
+  setRecordingUI("idle");
+  toast("Discarded");
+});
+
+function screenGridText(screen) {
+  if (!screen || !screen.text) return "(no screen captured)";
+  let lines = [];
+  for (let r = 0; r < screen.rows; r++) {
+    lines.push(String(r + 1).padStart(3, " ") + " | " + screen.text.slice(r * screen.cols, (r + 1) * screen.cols).replace(/\s+$/, ""));
+  }
+  return lines.join("\n");
+}
+
+function renderScreen(resp) {
+  if (!resp.text) return;
+  $("screen").textContent = screenGridText(resp);
+  $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
+  $("status").textContent = "connected (" + $("sessionId").value + ")";
+  $("status").classList.add("connected");
+}
+
+// Reflects the ACTUAL server-side session state, not just Terminal-tab button clicks — so a
+// session a suite auto-connected (via a "connect" step) shows up here too, not just ones
+// started by clicking Connect on this tab.
+async function refreshHeaderStatus() {
+  const sid = $("sessionId").value.trim() || "default";
+  try {
+    const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "sessions" }) });
+    const json = await res.json();
+    const isConnected = json.ok && json.sessions[sid] === "connected";
+    $("status").textContent = isConnected ? "connected (" + sid + ")" : "not connected";
+    $("status").classList.toggle("connected", isConnected);
+  } catch (e) {}
+}
+setInterval(refreshHeaderStatus, 4000);
+refreshHeaderStatus();
+
+// ---------- replay viewer ----------
+let replaySteps = [];
+let replayIndex = 0;
+
+function openReplay(steps, title) {
+  if (!steps || !steps.length) { toast("No captured steps for this scenario"); return; }
+  replaySteps = steps;
+  replayIndex = 0;
+  $("replayTitle").textContent = title;
+  $("replayBackdrop").classList.add("show");
+  showReplayStep();
+}
+
+function showReplayStep() {
+  const s = replaySteps[replayIndex];
+  $("replayLabel").textContent = s.label || "";
+  $("replayScreen").textContent = screenGridText(s.screen);
+  $("replayCounter").textContent = (replayIndex + 1) + " / " + replaySteps.length;
+  $("replayPrev").disabled = replayIndex === 0;
+  $("replayNext").disabled = replayIndex === replaySteps.length - 1;
+}
+
+$("replayPrev").addEventListener("click", () => { if (replayIndex > 0) { replayIndex--; showReplayStep(); } });
+$("replayNext").addEventListener("click", () => { if (replayIndex < replaySteps.length - 1) { replayIndex++; showReplayStep(); } });
+$("replayClose").addEventListener("click", () => $("replayBackdrop").classList.remove("show"));
+
+$("btnConnect").addEventListener("click", async () => {
+  try {
+    const resp = await rpc("connect", { host: $("host").value, port: parseInt($("port").value, 10), ssl: $("ssl").checked });
+    renderScreen(resp); toast("Connected");
+  } catch (e) {}
+});
+
+$("btnDisconnect").addEventListener("click", async () => {
+  try { await rpc("disconnect"); $("screen").textContent = "(not connected)"; $("oiaLine").textContent = "";
+    $("status").textContent = "not connected"; $("status").classList.remove("connected"); toast("Disconnected"); } catch (e) {}
+});
+
+$("btnSignon").addEventListener("click", async () => {
+  try {
+    if (isRecording) {
+      // signon is one atomic server-side call, not hooked for recording — decompose into the
+      // same granular type/type/key steps a human driving the fields by hand would produce,
+      // so recording actually captures it instead of silently skipping it.
+      await rpc("type", { label: "User", value: $("user").value });
+      await rpc("type", { label: "Password", value: $("pass").value });
+      const resp = await rpc("key", { key: "ENTER" });
+      renderScreen(resp);
+    } else {
+      const resp = await rpc("signon", { user: $("user").value, pass: $("pass").value });
+      renderScreen(resp);
+    }
+    toast("Signed on");
+  } catch (e) {}
+});
+
+$("btnType").addEventListener("click", async () => {
+  try {
+    const label = $("typeLabel").value.trim(), row = $("typeRow").value.trim(), col = $("typeCol").value.trim(), value = $("typeValue").value;
+    let extra;
+    if (label) {
+      extra = { label, value };
+    } else if (row && col) {
+      extra = { row: parseInt(row, 10), col: parseInt(col, 10), value };
+    } else {
+      toast("Enter a Label, or both Row and Col");
+      return;
+    }
+    const resp = await rpc("type", extra);
+    renderScreen(resp);
+  } catch (e) {}
+});
+
+const keypad = $("keypad");
+KEYS.forEach(k => {
+  const b = document.createElement("button");
+  b.textContent = k; b.className = "small";
+  b.addEventListener("click", async () => { try { renderScreen(await rpc("key", { key: k })); } catch (e) {} });
+  keypad.appendChild(b);
+});
+
+attachCommandAutocomplete($("typeValue"), $("typeDocsPanel"));
+
+// ---------- scenarios: project explorer ----------
+let currentColumns = [];
+let currentFlow = null;
+let currentFile = null;
+let flowsByName = {};
+
+async function loadFlows() {
+  const res = await fetch("/api/flows");
+  const json = await res.json();
+  const sel = $("flowSelect");
+  sel.innerHTML = "";
+  json.flows.forEach(f => {
+    flowsByName[f.name] = f;
+    const opt = document.createElement("option");
+    opt.value = f.name; opt.textContent = f.name;
+    sel.appendChild(opt);
+  });
+  if (json.flows.length) selectFlow(json.flows[0].name);
+}
+
+$("flowSelect").addEventListener("change", e => selectFlow(e.target.value));
+
+async function selectFlow(flowName) {
+  currentFlow = flowName;
+  currentFile = null;
+  $("flowDesc").textContent = "columns: " + flowsByName[flowName].columns.join(", ");
+  clearTable();
+  $("resultsPanel").style.display = "none";
+  await loadFileList();
+}
+
+async function refreshSessionBadge() {
+  const sid = $("scenarioSession").value.trim() || "default";
+  const badge = $("sessionBadge");
+  try {
+    const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "sessions" }) });
+    const json = await res.json();
+    const status = json.ok ? json.sessions[sid] : null;
+    if (status === "connected") {
+      badge.textContent = "● " + sid + " connected";
+      badge.className = "badge connected";
+    } else {
+      badge.textContent = "○ " + sid + " not connected";
+      badge.className = "badge disconnected";
+    }
+  } catch (e) {
+    badge.textContent = "? unknown";
+    badge.className = "badge";
+  }
+}
+$("scenarioSession").addEventListener("change", refreshSessionBadge);
+setInterval(refreshSessionBadge, 4000);
+
+async function loadFileList() {
+  const res = await fetch("/api/scenario-files?flow=" + encodeURIComponent(currentFlow));
+  const json = await res.json();
+  const list = $("fileList");
+  list.innerHTML = "";
+  if (!json.files.length) {
+    list.innerHTML = '<div class="empty-hint">No scenario files yet.<br>Create one above.</div>';
+    return;
+  }
+  json.files.forEach(f => {
+    const item = document.createElement("div");
+    item.className = "file-item" + (f.name === currentFile ? " active" : "");
+    item.innerHTML = `<span class="fname">${f.name}</span><span class="fcount">${f.rows}</span>
+      <button class="frename" title="rename">✎</button><button class="frename" title="delete">✕</button>`;
+    item.querySelector(".fname").addEventListener("click", () => selectFile(f.name));
+    const [renameBtn, deleteBtn] = item.querySelectorAll(".frename");
+    renameBtn.addEventListener("click", async (e) => { e.stopPropagation(); await renameFile(f.name); });
+    deleteBtn.addEventListener("click", async (e) => { e.stopPropagation(); await deleteFile(f.name); });
+    list.appendChild(item);
+  });
+}
+
+async function selectFile(name) {
+  currentFile = name;
+  document.querySelectorAll(".file-item").forEach(el => el.classList.remove("active"));
+  await loadFileList();
+  document.querySelectorAll(".file-item").forEach(el => {
+    if (el.querySelector(".fname").textContent === name) el.classList.add("active");
+  });
+  $("currentFileTitle").textContent = currentFlow + " / " + name + ".csv";
+  $("resultsPanel").style.display = "none";
+
+  const res = await fetch(`/api/scenarios?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(name)}`);
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  renderScenarioTable(json.rows, json.columns);
+  await loadVars();
+}
+
+// ---------- variables (${NAME} substitution) ----------
+
+async function loadVars() {
+  const res = await fetch(`/api/scenario-vars?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`);
+  const json = await res.json();
+  const tbody = document.querySelector("#varsTable tbody");
+  tbody.innerHTML = "";
+  if (json.ok) json.rows.forEach(addVarRow);
+}
+
+function addVarRow(row) {
+  const tbody = document.querySelector("#varsTable tbody");
+  const tr = document.createElement("tr");
+  const nameInput = document.createElement("input"); nameInput.value = row.name || ""; nameInput.placeholder = "NAME"; nameInput.autocomplete = "off";
+  const valueInput = document.createElement("input"); valueInput.value = row.value || ""; valueInput.placeholder = "value"; valueInput.autocomplete = "off";
+  const tdName = document.createElement("td"); tdName.appendChild(nameInput);
+  const tdValue = document.createElement("td"); tdValue.appendChild(valueInput);
+  const tdDel = document.createElement("td");
+  const del = document.createElement("button"); del.textContent = "✕"; del.className = "small danger";
+  del.addEventListener("click", () => tr.remove());
+  tdDel.appendChild(del);
+  tr.append(tdName, tdValue, tdDel);
+  tbody.appendChild(tr);
+}
+
+$("btnAddVar").addEventListener("click", () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+  addVarRow({});
+});
+
+$("btnSaveVars").addEventListener("click", async () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+  const rows = [];
+  document.querySelectorAll("#varsTable tbody tr").forEach(tr => {
+    const inputs = tr.querySelectorAll("input");
+    if (inputs[0].value.trim()) rows.push({ name: inputs[0].value.trim(), value: inputs[1].value });
+  });
+  const res = await fetch(`/api/scenario-vars?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
+    { method: "PUT", body: JSON.stringify(rows) });
+  const json = await res.json();
+  if (json.ok) toast("Saved " + json.count + " variables"); else toast("Error: " + json.error);
+});
+
+$("btnNewFile").addEventListener("click", async () => {
+  const name = $("newFileName").value.trim();
+  if (!name) { toast("Enter a file name"); return; }
+  const res = await fetch("/api/scenario-files", {
+    method: "POST", body: JSON.stringify({ flow: currentFlow, name })
+  });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  $("newFileName").value = "";
+  await loadFileList();
+  await selectFile(json.name);
+  toast("Created " + json.name);
+});
+
+async function renameFile(oldName) {
+  const newName = prompt("Rename '" + oldName + "' to:", oldName);
+  if (!newName || newName === oldName) return;
+  const res = await fetch("/api/scenario-files", {
+    method: "PUT", body: JSON.stringify({ flow: currentFlow, oldName, newName })
+  });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  if (currentFile === oldName) currentFile = json.name;
+  await loadFileList();
+  if (currentFile === json.name) await selectFile(json.name);
+  toast("Renamed");
+}
+
+async function deleteFile(name) {
+  if (!confirm("Delete scenario file '" + name + "'? This cannot be undone.")) return;
+  const res = await fetch(`/api/scenario-files?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(name)}`, { method: "DELETE" });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  if (currentFile === name) { currentFile = null; clearTable(); $("currentFileTitle").textContent = "No file selected"; }
+  await loadFileList();
+  toast("Deleted");
+}
+
+$("btnDeleteFile").addEventListener("click", () => {
+  if (!currentFile) { toast("No file selected"); return; }
+  deleteFile(currentFile);
+});
+
+function clearTable() {
+  currentColumns = [];
+  document.querySelector("#scenarioTable thead").innerHTML = "";
+  document.querySelector("#scenarioTable tbody").innerHTML = "";
+  document.querySelector("#varsTable tbody").innerHTML = "";
+}
+
+function renderScenarioTable(rows, columns) {
+  currentColumns = columns;
+  const thead = document.querySelector("#scenarioTable thead");
+  const tbody = document.querySelector("#scenarioTable tbody");
+  thead.innerHTML = "<tr>" + columns.map(c => `<th>${c}</th>`).join("") + "<th></th></tr>";
+  tbody.innerHTML = "";
+  rows.forEach(row => addRowToTable(row, columns));
+}
+
+function addRowToTable(row, columns) {
+  const tbody = document.querySelector("#scenarioTable tbody");
+  const tr = document.createElement("tr");
+  columns.forEach(c => {
+    const td = document.createElement("td");
+    const input = document.createElement("input");
+    input.value = row[c] || ""; input.dataset.col = c;
+    input.autocomplete = "off";
+    if (c.toLowerCase() === "command") attachCommandAutocomplete(input, $("scenarioDocsPanel"));
+    td.appendChild(input); tr.appendChild(td);
+  });
+  const tdDel = document.createElement("td");
+  const del = document.createElement("button");
+  del.textContent = "✕"; del.className = "small danger";
+  del.addEventListener("click", () => tr.remove());
+  tdDel.appendChild(del); tr.appendChild(tdDel);
+  tbody.appendChild(tr);
+}
+
+function readScenarioTable() {
+  const rows = [];
+  document.querySelectorAll("#scenarioTable tbody tr").forEach(tr => {
+    const row = {};
+    tr.querySelectorAll("input").forEach(inp => row[inp.dataset.col] = inp.value);
+    rows.push(row);
+  });
+  return rows;
+}
+
+$("btnAddRow").addEventListener("click", () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+  addRowToTable({}, currentColumns);
+});
+
+async function saveScenarios() {
+  if (!currentFile) { toast("Select or create a file first"); return false; }
+  const rows = readScenarioTable();
+  const res = await fetch(`/api/scenarios?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
+    { method: "PUT", body: JSON.stringify(rows) });
+  const json = await res.json();
+  if (json.ok) { toast("Saved " + json.count + " rows"); return true; }
+  toast("Error: " + json.error); return false;
+}
+
+$("btnSaveScenarios").addEventListener("click", saveScenarios);
+
+$("btnRunScenarios").addEventListener("click", async () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+
+  const sid = $("scenarioSession").value.trim() || "default";
+  await refreshSessionBadge();
+  const hasConnectStep = readScenarioTable().some(r => (r.action || "").trim().toLowerCase() === "connect");
+  if ($("sessionBadge").classList.contains("disconnected") && !hasConnectStep) {
+    toast(`Session "${sid}" is not connected. Go to the Terminal tab, Connect + Sign On first `
+      + `(or add a "connect" step to this suite to have it create its own session).`);
+    return;
+  }
+
+  if (!(await saveScenarios())) return;
+
+  const startRes = await fetch("/api/scenarios/run", {
+    method: "POST",
+    body: JSON.stringify({ flow: currentFlow, file: currentFile, sessionId: sid })
+  });
+  const startJson = await startRes.json();
+  if (!startJson.ok) { toast("Error: " + startJson.error); return; }
+
+  $("btnRunScenarios").disabled = true;
+  $("resultsPanel").style.display = "none";
+  $("runningPanel").style.display = "block";
+  $("runningScreen").style.display = $("headless").checked ? "none" : "block";
+  pollRun(startJson.runId, sid, $("headless").checked);
+});
+
+function pollRun(runId, sid, headless) {
+  const timer = setInterval(async () => {
+    const calls = [fetch("/api/scenarios/run-status?runId=" + encodeURIComponent(runId))];
+    if (!headless) {
+      calls.push(fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "screen", sessionId: sid }) }));
+    }
+    const [statusRes, screenRes] = await Promise.all(calls);
+    const status = await statusRes.json();
+
+    $("runningProgress").textContent = `${status.completed} / ${status.total} scenarios complete`;
+    $("runningCurrent").textContent = status.current ? "▸ " + status.current : "";
+
+    if (!headless && screenRes) {
+      const screen = await screenRes.json();
+      if (screen.ok && screen.text) {
+        let lines = [];
+        for (let r = 0; r < screen.rows; r++) {
+          lines.push(String(r + 1).padStart(3, " ") + " | " + screen.text.slice(r * screen.cols, (r + 1) * screen.cols).replace(/\s+$/, ""));
+        }
+        $("runningScreen").textContent = lines.join("\n");
+      }
+    }
+
+    if (status.status !== "running") {
+      clearInterval(timer);
+      $("btnRunScenarios").disabled = false;
+      $("runningPanel").style.display = "none";
+      if (status.status === "error") {
+        toast("Run failed: " + status.error);
+      } else {
+        renderResults(status.results);
+      }
+      loadFileList();
+    }
+  }, 700);
+}
+
+function renderResults(results) {
+  $("resultsPanel").style.display = "block";
+  const passed = results.filter(r => r.passed).length;
+  $("resultsSummary").textContent = `${passed} / ${results.length} passed`;
+  const thead = document.querySelector("#resultsTable thead");
+  const tbody = document.querySelector("#resultsTable tbody");
+  thead.innerHTML = "<tr><th>Result</th><th>Row</th><th>Checks</th><th>Extracted</th><th></th></tr>";
+  tbody.innerHTML = "";
+  results.forEach((r, idx) => {
+    const tr = document.createElement("tr");
+    const rowText = Object.entries(r.row).map(([k, v]) => `${k}=${v}`).join(", ");
+    const checksText = (r.checks || []).map(c =>
+      `${c.name}: expected "${c.expected}" got "${c.actual}" ${c.passed ? "✓" : "✗"}`
+    ).join(" | ") + (r.error ? " ERROR: " + r.error : "");
+    const extractedText = Object.entries(r.extracted || {}).map(([k, v]) => `${k}=${v}`).join(", ");
+    tr.innerHTML = `<td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? "PASS" : "FAIL"}</td>
+      <td>${rowText}</td><td>${checksText}</td><td>${extractedText}</td><td></td>`;
+    if (r.steps && r.steps.length) {
+      const btn = document.createElement("button");
+      btn.className = "replay-link";
+      btn.textContent = "▶ Replay (" + r.steps.length + ")";
+      btn.addEventListener("click", () => openReplay(r.steps, rowText));
+      tr.lastElementChild.appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------- init ----------
+loadFlows();
+</script>
+</body>
+</html>

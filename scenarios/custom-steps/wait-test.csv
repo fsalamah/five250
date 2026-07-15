@@ -1,0 +1,8 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+w,1,include,signon-common,,
+w,2,wait,,2,
+w,3,type,"20,7",WRKACTJOB,
+w,4,key,,ENTER,
+w,5,check,row:1,,Work with Active Jobs
+w,6,key,,F3,

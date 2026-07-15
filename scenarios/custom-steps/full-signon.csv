@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+signon-and-wrkactjob,1,type,label:Your user name,${USER},
+signon-and-wrkactjob,2,type,label:Password,${PASSWORD},
+signon-and-wrkactjob,3,key,,ENTER,
+signon-and-wrkactjob,4,key,,ENTER,
+signon-and-wrkactjob,5,type,"20,7",WRKACTJOB,
+signon-and-wrkactjob,6,key,,ENTER,
+signon-and-wrkactjob,7,check,row:1,,Work with Active Jobs
+signon-and-wrkactjob,8,key,,F3,

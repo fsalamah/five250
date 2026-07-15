@@ -1,0 +1,7 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+main,1,include,signon-common,,
+main,2,type,"20,7",${COMMAND},
+main,3,key,,ENTER,
+main,4,check,row:1,,${EXPECTED_TITLE}
+main,5,key,,F3,

@@ -1,0 +1,5 @@
+name,value
+USER,your-pub400-user
+PASSWORD,your-pub400-password
+COMMAND,WRKACTJOB
+EXPECTED_TITLE,Work with Active Jobs

@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+extract-demo,1,include,signon-common,,
+extract-demo,2,type,"20,7",WRKACTJOB,
+extract-demo,3,key,,ENTER,
+extract-demo,4,extract,label:Active jobs:,activeJobCount,
+extract-demo,5,extract,label:CPU %:,cpuPercent,
+extract-demo,6,extract,label:Elapsed time:,elapsedTime,
+extract-demo,7,key,,F3,

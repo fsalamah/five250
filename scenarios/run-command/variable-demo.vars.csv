@@ -1,0 +1,5 @@
+name,value
+CMD1,WRKACTJOB
+TITLE1,Work with Active Jobs
+CMD2,WRKSPLF
+TITLE2,Work with All Spooled Files

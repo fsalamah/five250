@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Thin wrapper so `five250` is a real command on PATH (needed for bash completion
+# to register against something other than `java -jar ...`).
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec java -jar "$DIR/target/five250.jar" "$@"

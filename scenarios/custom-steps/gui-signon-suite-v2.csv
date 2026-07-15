@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+gui-case,1,type,label:Your user name,${USER},
+gui-case,2,type,label:Password,${PASSWORD},
+gui-case,3,key,,ENTER,
+gui-case,4,key,,ENTER,
+gui-case,5,type,"20,7",WRKACTJOB,
+gui-case,6,key,,ENTER,
+gui-case,7,check,row:1,,Work with Active Jobs
+gui-case,8,key,,F3,

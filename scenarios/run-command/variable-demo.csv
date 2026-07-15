@@ -1,0 +1,3 @@
+command,expectedTitleContains
+${CMD1},${TITLE1}
+${CMD2},${TITLE2}

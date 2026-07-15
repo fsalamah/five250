@@ -1,0 +1,6 @@
+case,step,action,target,value,expected
+signon-and-check,1,include,signon-common,,
+signon-and-check,2,type,"20,7",${COMMAND},
+signon-and-check,3,key,,ENTER,
+signon-and-check,4,check,row:1,,${EXPECTED_TITLE}
+signon-and-check,5,key,,F3,

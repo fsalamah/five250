@@ -1,0 +1,3 @@
+command,expectedTitleContains
+WRKACTJOB,Work with Active Jobs
+WRKSPLF,NOPE THIS SHOULD FAIL

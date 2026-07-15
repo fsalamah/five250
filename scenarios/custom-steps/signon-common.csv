@@ -1,0 +1,5 @@
+case,step,action,target,value,expected
+signon,1,type,label:Your user name,${USER},
+signon,2,type,label:Password,${PASSWORD},
+signon,3,key,,ENTER,
+signon,4,key,,ENTER,

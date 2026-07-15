@@ -1,0 +1,342 @@
+[
+  { "name": "WRKACTJOB", "syntax": "WRKACTJOB (SBS *ALL) (JOB *ALL)", "description": "Displays and works with the status of jobs currently active on the system (jobs running, in a subsystem, or on a job queue).", "params": [
+    { "name": "SBS", "description": "Subsystem description to limit the list to. Default *ALL." },
+    { "name": "JOB", "description": "Job name to limit the list to. Default *ALL." },
+    { "name": "OUTPUT", "description": "*, *PRINT — send the display to the printer instead of the screen." }
+  ]},
+  { "name": "WRKSPLF", "syntax": "WRKSPLF (FILE *ALL) (USRDTA *ALL)", "description": "Displays and works with spooled files, letting you hold, release, delete, or send them.", "params": [
+    { "name": "FILE", "description": "Spooled file name to limit the list to." },
+    { "name": "USRDTA", "description": "User who owns the spooled files." }
+  ]},
+  { "name": "WRKOBJ", "syntax": "WRKOBJ OBJ(library/object) OBJTYPE(*ALL)", "description": "Works with a list of objects, showing their attributes and letting you perform actions like move, rename, or delete.", "params": [
+    { "name": "OBJ", "description": "Qualified object name, wildcard (*) allowed." },
+    { "name": "OBJTYPE", "description": "Object type filter, e.g. *FILE, *PGM, *LIB." }
+  ]},
+  { "name": "WRKLIB", "syntax": "WRKLIB LIB(*ALL)", "description": "Displays and works with a list of libraries.", "params": [
+    { "name": "LIB", "description": "Library name or generic name, or *ALL." }
+  ]},
+  { "name": "DSPLIB", "syntax": "DSPLIB LIB(library-name)", "description": "Displays a list of the objects in a library.", "params": [
+    { "name": "LIB", "description": "Name of the library to display." },
+    { "name": "OUTPUT", "description": "*, *PRINT, *PRTWIDE." }
+  ]},
+  { "name": "CRTLIB", "syntax": "CRTLIB LIB(library-name) TEXT('description')", "description": "Creates a new library.", "params": [
+    { "name": "LIB", "description": "Name of the library to create." },
+    { "name": "TEXT", "description": "Descriptive text for the library." },
+    { "name": "AUT", "description": "Authority given to public users. Default *SYSVAL." }
+  ]},
+  { "name": "DLTLIB", "syntax": "DLTLIB LIB(library-name)", "description": "Deletes a library and everything in it. Cannot be undone without a restore.", "params": [
+    { "name": "LIB", "description": "Name of the library to delete." }
+  ]},
+  { "name": "DSPJOB", "syntax": "DSPJOB JOB(job-name)", "description": "Displays detailed information about a job: status, attributes, open files, call stack, spooled files.", "params": [
+    { "name": "JOB", "description": "Qualified job name, or * for the current job." }
+  ]},
+  { "name": "CHGJOB", "syntax": "CHGJOB JOB(job-name)", "description": "Changes the attributes of a job, such as run priority, output queue, or logging level.", "params": [
+    { "name": "JOB", "description": "Qualified job name to change." },
+    { "name": "RUNPTY", "description": "Run priority, 1 (highest) to 99 (lowest)." }
+  ]},
+  { "name": "ENDJOB", "syntax": "ENDJOB JOB(job-name) OPTION(*CNTRLD)", "description": "Ends a job that is currently running.", "params": [
+    { "name": "JOB", "description": "Qualified job name to end." },
+    { "name": "OPTION", "description": "*CNTRLD (controlled) or *IMMED (immediate)." }
+  ]},
+  { "name": "HLDJOB", "syntax": "HLDJOB JOB(job-name)", "description": "Holds a job, suspending it until released with RLSJOB.", "params": [
+    { "name": "JOB", "description": "Qualified job name to hold." }
+  ]},
+  { "name": "RLSJOB", "syntax": "RLSJOB JOB(job-name)", "description": "Releases a previously held job so it can continue running.", "params": [
+    { "name": "JOB", "description": "Qualified job name to release." }
+  ]},
+  { "name": "WRKSYSSTS", "syntax": "WRKSYSSTS", "description": "Displays and lets you change system status information: storage pools, CPU utilization, and auxiliary storage usage." , "params": []},
+  { "name": "WRKDSKSTS", "syntax": "WRKDSKSTS", "description": "Displays disk (auxiliary storage) status: percent used and I/O rates per unit.", "params": []},
+  { "name": "WRKUSRPRF", "syntax": "WRKUSRPRF USRPRF(*ALL)", "description": "Displays and works with a list of user profiles.", "params": [
+    { "name": "USRPRF", "description": "User profile name, generic name, or *ALL." }
+  ]},
+  { "name": "DSPUSRPRF", "syntax": "DSPUSRPRF USRPRF(profile-name)", "description": "Displays the attributes of a single user profile.", "params": [
+    { "name": "USRPRF", "description": "User profile name to display." }
+  ]},
+  { "name": "CHGUSRPRF", "syntax": "CHGUSRPRF USRPRF(profile-name)", "description": "Changes the attributes of a user profile: password, authority, initial menu, and more.", "params": [
+    { "name": "USRPRF", "description": "User profile to change." },
+    { "name": "PASSWORD", "description": "New password, or *NONE to disable password signon." }
+  ]},
+  { "name": "WRKSBS", "syntax": "WRKSBS SBS(*ALL)", "description": "Displays and works with a list of active subsystems.", "params": [
+    { "name": "SBS", "description": "Subsystem name or *ALL." }
+  ]},
+  { "name": "WRKSBSJOB", "syntax": "WRKSBSJOB SBS(subsystem-name)", "description": "Displays and works with the jobs running in a specific subsystem.", "params": [
+    { "name": "SBS", "description": "Subsystem description name." }
+  ]},
+  { "name": "STRSBS", "syntax": "STRSBS SBSD(library/subsystem-description)", "description": "Starts a subsystem so it can begin processing jobs.", "params": [
+    { "name": "SBSD", "description": "Qualified subsystem description name." }
+  ]},
+  { "name": "ENDSBS", "syntax": "ENDSBS SBS(subsystem-name) OPTION(*CNTRLD)", "description": "Ends a subsystem and the jobs running within it.", "params": [
+    { "name": "SBS", "description": "Subsystem name to end, or *ALL." },
+    { "name": "OPTION", "description": "*CNTRLD or *IMMED." }
+  ]},
+  { "name": "WRKOUTQ", "syntax": "WRKOUTQ OUTQ(*ALL)", "description": "Displays and works with a list of output queues and the spooled files in them.", "params": [
+    { "name": "OUTQ", "description": "Output queue name or *ALL." }
+  ]},
+  { "name": "WRKJOBQ", "syntax": "WRKJOBQ JOBQ(*ALL)", "description": "Displays and works with a list of job queues.", "params": [
+    { "name": "JOBQ", "description": "Job queue name or *ALL." }
+  ]},
+  { "name": "DSPPGM", "syntax": "DSPPGM PGM(library/program)", "description": "Displays the attributes of a program object: creation info, size, language, and modules.", "params": [
+    { "name": "PGM", "description": "Qualified program name." }
+  ]},
+  { "name": "DSPFD", "syntax": "DSPFD FILE(library/file)", "description": "Displays the description of a database, device, or save file: record format, size, member info.", "params": [
+    { "name": "FILE", "description": "Qualified file name." }
+  ]},
+  { "name": "DSPFFD", "syntax": "DSPFFD FILE(library/file)", "description": "Displays field-level description of a database file: field names, types, lengths.", "params": [
+    { "name": "FILE", "description": "Qualified file name." }
+  ]},
+  { "name": "CPYF", "syntax": "CPYF FROMFILE(lib/file) TOFILE(lib/file)", "description": "Copies all or part of the data in a database, device, or save file to another file.", "params": [
+    { "name": "FROMFILE", "description": "Source file, qualified with library." },
+    { "name": "TOFILE", "description": "Destination file, qualified with library." },
+    { "name": "MBROPT", "description": "*ADD, *REPLACE, or *UPDADD." }
+  ]},
+  { "name": "STRSQL", "syntax": "STRSQL", "description": "Starts the interactive SQL session (Run SQL Statements) for ad-hoc queries against DB2 for i.", "params": []},
+  { "name": "RUNSQLSTM", "syntax": "RUNSQLSTM SRCFILE(lib/file) SRCMBR(member)", "description": "Runs a batch of SQL statements from a source file member.", "params": [
+    { "name": "SRCFILE", "description": "Qualified source physical file containing the statements." },
+    { "name": "SRCMBR", "description": "Member name within the source file." }
+  ]},
+  { "name": "SAVLIB", "syntax": "SAVLIB LIB(library-name) DEV(device-name)", "description": "Saves the contents of one or more libraries to tape, save file, or optical media.", "params": [
+    { "name": "LIB", "description": "Library name(s) to save, or *ALLUSR, *NONSYS." },
+    { "name": "DEV", "description": "Device name, or *SAVF to save to a save file." }
+  ]},
+  { "name": "RSTLIB", "syntax": "RSTLIB SAVLIB(library-name) DEV(device-name)", "description": "Restores a library previously saved with SAVLIB.", "params": [
+    { "name": "SAVLIB", "description": "Name of the library as it was saved." },
+    { "name": "DEV", "description": "Device name, or *SAVF." }
+  ]},
+  { "name": "SAVOBJ", "syntax": "SAVOBJ OBJ(object-name) LIB(library-name) DEV(device-name)", "description": "Saves one or more individual objects rather than a whole library.", "params": [
+    { "name": "OBJ", "description": "Object name(s), wildcard allowed." },
+    { "name": "LIB", "description": "Library containing the objects." },
+    { "name": "DEV", "description": "Device name, or *SAVF." }
+  ]},
+  { "name": "RSTOBJ", "syntax": "RSTOBJ OBJ(object-name) SAVLIB(library-name) DEV(device-name)", "description": "Restores individual objects previously saved with SAVOBJ.", "params": [
+    { "name": "OBJ", "description": "Object name(s) to restore." },
+    { "name": "SAVLIB", "description": "Library the objects were saved from." },
+    { "name": "DEV", "description": "Device name, or *SAVF." }
+  ]},
+  { "name": "WRKLNK", "syntax": "WRKLNK OBJ('/path/*')", "description": "Displays and works with objects in the IFS (integrated file system) directory structure.", "params": [
+    { "name": "OBJ", "description": "IFS path pattern to list." }
+  ]},
+  { "name": "WRKMSGQ", "syntax": "WRKMSGQ MSGQ(message-queue-name)", "description": "Displays and works with the messages in a message queue.", "params": [
+    { "name": "MSGQ", "description": "Message queue name, or *WRKSTN, *SYSOPR." }
+  ]},
+  { "name": "DSPMSG", "syntax": "DSPMSG MSGQ(message-queue-name)", "description": "Displays the messages in a message queue without the work-with options.", "params": [
+    { "name": "MSGQ", "description": "Message queue name." }
+  ]},
+  { "name": "SNDMSG", "syntax": "SNDMSG MSG('text') TOUSR(user-name)", "description": "Sends a short message to a user's message queue.", "params": [
+    { "name": "MSG", "description": "Message text to send." },
+    { "name": "TOUSR", "description": "Target user profile, or *SYSOPR, *ALLACT." }
+  ]},
+  { "name": "DSPLOG", "syntax": "DSPLOG PERIOD((time date))", "description": "Displays the history log (QHST) — system events, job starts/ends, messages.", "params": [
+    { "name": "PERIOD", "description": "Time/date range to display." }
+  ]},
+  { "name": "WRKPRB", "syntax": "WRKPRB", "description": "Displays and works with problems logged in the system problem log.", "params": []},
+  { "name": "GO", "syntax": "GO MENU(menu-name)", "description": "Displays a menu, e.g. GO MAIN for the IBM i Main Menu.", "params": [
+    { "name": "MENU", "description": "Menu name, e.g. MAIN, ASSIST." }
+  ]},
+  { "name": "SIGNOFF", "syntax": "SIGNOFF (*NOLIST)", "description": "Signs off the current interactive job, ending the session.", "params": [
+    { "name": "LOG", "description": "*LIST, *NOLIST, *SYSVAL — whether to produce a job log." }
+  ]},
+  { "name": "DSPPFM", "syntax": "DSPPFM FILE(lib/file)", "description": "Displays the records in a physical file member in a browsable view.", "params": [
+    { "name": "FILE", "description": "Qualified physical file name." }
+  ]},
+  { "name": "RUNQRY", "syntax": "RUNQRY QRY(lib/query)", "description": "Runs a Query/400 definition and displays or prints its output.", "params": [
+    { "name": "QRY", "description": "Qualified query definition name." }
+  ]},
+  { "name": "WRKREGINF", "syntax": "WRKREGINF", "description": "Displays and works with exit point registration information.", "params": []},
+  { "name": "WRKENVVAR", "syntax": "WRKENVVAR", "description": "Displays and works with environment variables at the job or system level.", "params": []},
+  { "name": "ADDENVVAR", "syntax": "ADDENVVAR ENVVAR(name) VALUE('value')", "description": "Adds a new environment variable.", "params": [
+    { "name": "ENVVAR", "description": "Name of the environment variable." },
+    { "name": "VALUE", "description": "Value to assign." }
+  ]},
+  { "name": "CRTPF", "syntax": "CRTPF FILE(lib/file) RCDLEN(length)", "description": "Creates a physical file (a database table).", "params": [
+    { "name": "FILE", "description": "Qualified file name to create." },
+    { "name": "RCDLEN", "description": "Record length in bytes, if not created from DDS/SQL source." }
+  ]},
+  { "name": "CRTSRCPF", "syntax": "CRTSRCPF FILE(lib/file)", "description": "Creates a source physical file for storing DDS, RPG, CL, or SQL source members.", "params": [
+    { "name": "FILE", "description": "Qualified file name to create." }
+  ]},
+  { "name": "STRPDM", "syntax": "STRPDM", "description": "Starts Programming Development Manager, a menu-driven tool for managing libraries, source, and programs.", "params": []},
+  { "name": "WRKSYSVAL", "syntax": "WRKSYSVAL SYSVAL(*ALL)", "description": "Displays and works with system values that control IBM i behavior.", "params": [
+    { "name": "SYSVAL", "description": "System value name or generic name, or *ALL." }
+  ]},
+  { "name": "DSPSYSVAL", "syntax": "DSPSYSVAL SYSVAL(system-value-name)", "description": "Displays the current setting of a single system value.", "params": [
+    { "name": "SYSVAL", "description": "Name of the system value to display." }
+  ]},
+  { "name": "RTVSYSVAL", "syntax": "RTVSYSVAL SYSVAL(system-value-name) RTNVAR(&VAR)", "description": "Retrieves a system value into a CL variable, for use inside a CL program.", "params": [
+    { "name": "SYSVAL", "description": "Name of the system value to retrieve." },
+    { "name": "RTNVAR", "description": "CL variable to receive the value." }
+  ]},
+  { "name": "CHGSYSVAL", "syntax": "CHGSYSVAL SYSVAL(system-value-name) VALUE(new-value)", "description": "Changes a system value that controls IBM i behavior.", "params": [
+    { "name": "SYSVAL", "description": "System value name to change." },
+    { "name": "VALUE", "description": "New value to set." }
+  ]},
+  { "name": "CRTDTAARA", "syntax": "CRTDTAARA DTAARA(lib/dataarea) TYPE(*CHAR) LEN(length)", "description": "Creates a data area, a small object used to share a value between programs/jobs.", "params": [
+    { "name": "DTAARA", "description": "Qualified name of the data area to create." },
+    { "name": "TYPE", "description": "*CHAR, *DEC, *LGL." },
+    { "name": "LEN", "description": "Length of the data area." }
+  ]},
+  { "name": "CHGDTAARA", "syntax": "CHGDTAARA DTAARA(lib/dataarea) VALUE(new-value)", "description": "Changes the value stored in a data area.", "params": [
+    { "name": "DTAARA", "description": "Qualified data area name." },
+    { "name": "VALUE", "description": "New value to store." }
+  ]},
+  { "name": "DSPDTAARA", "syntax": "DSPDTAARA DTAARA(lib/dataarea)", "description": "Displays the current value and attributes of a data area.", "params": [
+    { "name": "DTAARA", "description": "Qualified data area name." }
+  ]},
+  { "name": "CRTDTAQ", "syntax": "CRTDTAQ DTAQ(lib/queue) MAXLEN(length)", "description": "Creates a data queue, used for fast asynchronous communication between jobs.", "params": [
+    { "name": "DTAQ", "description": "Qualified name of the data queue to create." },
+    { "name": "MAXLEN", "description": "Maximum length of an entry on the queue." }
+  ]},
+  { "name": "SNDDTAQ", "syntax": "SNDDTAQ DTAQ(lib/queue) DTAQLIB(library) DTA('data')", "description": "Sends an entry to a data queue.", "params": [
+    { "name": "DTAQ", "description": "Data queue name." },
+    { "name": "DTA", "description": "Data to send." }
+  ]},
+  { "name": "RCVDTAQ", "syntax": "RCVDTAQ DTAQ(lib/queue) RCVLEN(length)", "description": "Receives (and removes) an entry from a data queue.", "params": [
+    { "name": "DTAQ", "description": "Data queue name." },
+    { "name": "WAIT", "description": "Seconds to wait for an entry if the queue is empty. Default *IMMED." }
+  ]},
+  { "name": "CRTJRN", "syntax": "CRTJRN JRN(lib/journal) JRNRCV(lib/receiver)", "description": "Creates a journal, used to record changes made to journaled objects for recovery/audit.", "params": [
+    { "name": "JRN", "description": "Qualified journal name to create." },
+    { "name": "JRNRCV", "description": "Journal receiver that will hold the journal entries." }
+  ]},
+  { "name": "CRTJRNRCV", "syntax": "CRTJRNRCV JRNRCV(lib/receiver)", "description": "Creates a journal receiver, the object that actually stores journal entries.", "params": [
+    { "name": "JRNRCV", "description": "Qualified name of the receiver to create." }
+  ]},
+  { "name": "STRJRNPF", "syntax": "STRJRNPF FILE(lib/file) JRN(lib/journal)", "description": "Starts journaling changes made to a physical file.", "params": [
+    { "name": "FILE", "description": "Qualified physical file to journal." },
+    { "name": "JRN", "description": "Journal to record the changes to." }
+  ]},
+  { "name": "DSPJRN", "syntax": "DSPJRN JRN(lib/journal)", "description": "Displays or prints entries from a journal.", "params": [
+    { "name": "JRN", "description": "Qualified journal name." },
+    { "name": "OUTPUT", "description": "*, *PRINT, *OUTFILE." }
+  ]},
+  { "name": "WRKJRN", "syntax": "WRKJRN JRN(journal-name)", "description": "Works with a list of journals and their receivers.", "params": [
+    { "name": "JRN", "description": "Journal name, generic name, or *ALL." }
+  ]},
+  { "name": "DSPPTF", "syntax": "DSPPTF LICPGM(5770SS1)", "description": "Displays the status of PTFs (fixes) applied to a licensed program.", "params": [
+    { "name": "LICPGM", "description": "Licensed program product ID." }
+  ]},
+  { "name": "WRKPTFGRP", "syntax": "WRKPTFGRP", "description": "Displays and works with PTF groups installed on the system.", "params": []},
+  { "name": "LODPTF", "syntax": "LODPTF LICPGM(product-id) DEV(device-name)", "description": "Loads PTFs from media onto the system, prior to applying them.", "params": [
+    { "name": "LICPGM", "description": "Licensed program to load PTFs for." },
+    { "name": "DEV", "description": "Device the PTF media is on." }
+  ]},
+  { "name": "APYPTF", "syntax": "APYPTF LICPGM(product-id) SELECT(*ALL)", "description": "Applies PTFs that have been loaded, activating the fixes.", "params": [
+    { "name": "LICPGM", "description": "Licensed program to apply PTFs for." },
+    { "name": "SELECT", "description": "*ALL or a list of specific PTF numbers." }
+  ]},
+  { "name": "SAVSYS", "syntax": "SAVSYS DEV(device-name)", "description": "Saves the operating system (Licensed Internal Code and QSYS) — a full system-level backup.", "params": [
+    { "name": "DEV", "description": "Tape or optical device to save to." }
+  ]},
+  { "name": "WRKTCPSTS", "syntax": "WRKTCPSTS OPTION(*IFC)", "description": "Displays and works with the status of TCP/IP interfaces or connections.", "params": [
+    { "name": "OPTION", "description": "*IFC (interfaces) or *CNN (connections)." }
+  ]},
+  { "name": "CFGTCP", "syntax": "CFGTCP", "description": "Displays a menu for configuring TCP/IP: interfaces, routes, host table, and more.", "params": []},
+  { "name": "PING", "syntax": "PING RMTSYS('hostname-or-ip')", "description": "Tests TCP/IP connectivity to a remote system.", "params": [
+    { "name": "RMTSYS", "description": "Remote host name or IP address to ping." }
+  ]},
+  { "name": "NETSTAT", "syntax": "NETSTAT", "description": "Displays a menu for TCP/IP network status: connections, interfaces, routes.", "params": []},
+  { "name": "WRKDEVD", "syntax": "WRKDEVD DEVD(*ALL)", "description": "Displays and works with a list of device descriptions.", "params": [
+    { "name": "DEVD", "description": "Device description name, generic name, or *ALL." }
+  ]},
+  { "name": "WRKCFGSTS", "syntax": "WRKCFGSTS CFGTYPE(*DEV) CFGD(device-name)", "description": "Displays and works with the status of a configuration object: device, controller, line, network.", "params": [
+    { "name": "CFGTYPE", "description": "*DEV, *CTL, *LIN, *NWS, *NWI." },
+    { "name": "CFGD", "description": "Name of the configuration object." }
+  ]},
+  { "name": "VRYCFG", "syntax": "VRYCFG CFGOBJ(name) CFGTYPE(*DEV) STATUS(*ON)", "description": "Varies a configuration object on or off (e.g. a device, line, or controller).", "params": [
+    { "name": "CFGOBJ", "description": "Name of the configuration object." },
+    { "name": "STATUS", "description": "*ON or *OFF." }
+  ]},
+  { "name": "STRPRTWTR", "syntax": "STRPRTWTR DEV(printer-name)", "description": "Starts a print writer, which sends spooled files on an output queue to a printer.", "params": [
+    { "name": "DEV", "description": "Printer device name." }
+  ]},
+  { "name": "ENDWTR", "syntax": "ENDWTR SBS(subsystem-name) OPTION(*CNTRLD)", "description": "Ends a print writer or subsystem writer job.", "params": [
+    { "name": "OPTION", "description": "*CNTRLD or *IMMED." }
+  ]},
+  { "name": "WRKWTR", "syntax": "WRKWTR WTR(*ALL)", "description": "Displays and works with a list of writer (spool/print) jobs.", "params": [
+    { "name": "WTR", "description": "Writer job name or *ALL." }
+  ]},
+  { "name": "DLTSPLF", "syntax": "DLTSPLF FILE(spooled-file-name) JOB(job-name) SPLNBR(number)", "description": "Deletes a spooled file.", "params": [
+    { "name": "FILE", "description": "Spooled file name." },
+    { "name": "SPLNBR", "description": "Spooled file number, or *ONLY, *LAST." }
+  ]},
+  { "name": "HLDSPLF", "syntax": "HLDSPLF FILE(spooled-file-name) SPLNBR(*ONLY)", "description": "Holds a spooled file so it won't print until released.", "params": [
+    { "name": "FILE", "description": "Spooled file name." }
+  ]},
+  { "name": "RLSSPLF", "syntax": "RLSSPLF FILE(spooled-file-name) SPLNBR(*ONLY)", "description": "Releases a held spooled file so it can print.", "params": [
+    { "name": "FILE", "description": "Spooled file name." }
+  ]},
+  { "name": "CHGSPLFA", "syntax": "CHGSPLFA FILE(spooled-file-name) SPLNBR(*ONLY) OUTQ(lib/outq)", "description": "Changes the attributes of a spooled file, such as its output queue or priority.", "params": [
+    { "name": "FILE", "description": "Spooled file name." },
+    { "name": "OUTQ", "description": "New output queue for the file." }
+  ]},
+  { "name": "GRTOBJAUT", "syntax": "GRTOBJAUT OBJ(lib/object) OBJTYPE(*ALL) USER(user-name) AUT(*USE)", "description": "Grants authority to an object for a user or group.", "params": [
+    { "name": "OBJ", "description": "Qualified object name." },
+    { "name": "USER", "description": "User or group profile to grant authority to." },
+    { "name": "AUT", "description": "Authority to grant, e.g. *USE, *CHANGE, *ALL, *EXCLUDE." }
+  ]},
+  { "name": "RVKOBJAUT", "syntax": "RVKOBJAUT OBJ(lib/object) OBJTYPE(*ALL) USER(user-name) AUT(*ALL)", "description": "Revokes previously granted authority to an object.", "params": [
+    { "name": "OBJ", "description": "Qualified object name." },
+    { "name": "USER", "description": "User or group profile to revoke authority from." }
+  ]},
+  { "name": "WRKAUTL", "syntax": "WRKAUTL AUTL(*ALL)", "description": "Displays and works with a list of authorization lists.", "params": [
+    { "name": "AUTL", "description": "Authorization list name or *ALL." }
+  ]},
+  { "name": "EDTOBJAUT", "syntax": "EDTOBJAUT OBJ(lib/object) OBJTYPE(*ALL)", "description": "Displays and lets you edit the full authority list for an object in a grid.", "params": [
+    { "name": "OBJ", "description": "Qualified object name." }
+  ]},
+  { "name": "CRTBNDRPG", "syntax": "CRTBNDRPG PGM(lib/program) SRCFILE(lib/file)", "description": "Compiles an RPG source member into a standalone (bound) program object.", "params": [
+    { "name": "PGM", "description": "Qualified name of the program to create." },
+    { "name": "SRCFILE", "description": "Source physical file containing the RPG source." }
+  ]},
+  { "name": "CRTBNDCL", "syntax": "CRTBNDCL PGM(lib/program) SRCFILE(lib/file)", "description": "Compiles a CL source member into a standalone (bound) program object.", "params": [
+    { "name": "PGM", "description": "Qualified name of the program to create." },
+    { "name": "SRCFILE", "description": "Source physical file containing the CL source." }
+  ]},
+  { "name": "STRDBG", "syntax": "STRDBG PGM(lib/program)", "description": "Starts interactive debug mode against a program, for stepping through and setting breakpoints.", "params": [
+    { "name": "PGM", "description": "Qualified name of the program to debug." }
+  ]},
+  { "name": "ENDDBG", "syntax": "ENDDBG", "description": "Ends the current interactive debug session.", "params": []},
+  { "name": "DUPOBJ", "syntax": "DUPOBJ OBJ(lib/object) FROMLIB(library) OBJTYPE(*ALL) TOLIB(library)", "description": "Duplicates an object within the system, optionally under a new name or library.", "params": [
+    { "name": "OBJ", "description": "Object name to duplicate." },
+    { "name": "TOLIB", "description": "Destination library." }
+  ]},
+  { "name": "RNMOBJ", "syntax": "RNMOBJ OBJ(lib/object) OBJTYPE(*ALL) NEWOBJ(new-name)", "description": "Renames an object.", "params": [
+    { "name": "OBJ", "description": "Qualified object name to rename." },
+    { "name": "NEWOBJ", "description": "New object name." }
+  ]},
+  { "name": "MOVOBJ", "syntax": "MOVOBJ OBJ(lib/object) OBJTYPE(*ALL) TOLIB(library)", "description": "Moves an object from one library to another.", "params": [
+    { "name": "OBJ", "description": "Qualified object name to move." },
+    { "name": "TOLIB", "description": "Destination library." }
+  ]},
+  { "name": "CRTSBSD", "syntax": "CRTSBSD SBSD(lib/subsystem) POOLS((1 *BASE))", "description": "Creates a subsystem description, which defines how a subsystem processes jobs.", "params": [
+    { "name": "SBSD", "description": "Qualified name of the subsystem description to create." }
+  ]},
+  { "name": "CHGSBSD", "syntax": "CHGSBSD SBSD(lib/subsystem)", "description": "Changes the attributes of an existing subsystem description.", "params": [
+    { "name": "SBSD", "description": "Qualified subsystem description name." }
+  ]},
+  { "name": "CRTJOBD", "syntax": "CRTJOBD JOBD(lib/jobdesc)", "description": "Creates a job description, a template of attributes used when a job is submitted.", "params": [
+    { "name": "JOBD", "description": "Qualified name of the job description to create." }
+  ]},
+  { "name": "CHGJOBD", "syntax": "CHGJOBD JOBD(lib/jobdesc)", "description": "Changes the attributes of a job description.", "params": [
+    { "name": "JOBD", "description": "Qualified job description name." }
+  ]},
+  { "name": "WRKJOBD", "syntax": "WRKJOBD JOBD(*ALL)", "description": "Displays and works with a list of job descriptions.", "params": [
+    { "name": "JOBD", "description": "Job description name, generic name, or *ALL." }
+  ]},
+  { "name": "SBMJOB", "syntax": "SBMJOB CMD(command-to-run) JOB(job-name) JOBQ(lib/jobqueue)", "description": "Submits a batch job to run a command or program asynchronously on a job queue.", "params": [
+    { "name": "CMD", "description": "Command to run in the submitted job." },
+    { "name": "JOBQ", "description": "Job queue to submit to." }
+  ]},
+  { "name": "WRKSYSACT", "syntax": "WRKSYSACT", "description": "Displays real-time system activity: jobs/threads by CPU, DB, and I/O usage.", "params": []},
+  { "name": "STRPFRMON", "syntax": "STRPFRMON MBR(member-name)", "description": "Starts performance data collection for later analysis.", "params": [
+    { "name": "MBR", "description": "Member name to store the collected data in." }
+  ]},
+  { "name": "ENDPFRMON", "syntax": "ENDPFRMON", "description": "Ends the current performance monitor data collection.", "params": []},
+  { "name": "CPYTOIMPF", "syntax": "CPYTOIMPF FROMFILE(lib/file) TOSTMF('/path/file.csv')", "description": "Copies a database file's data out to a delimited (e.g. CSV) stream file in the IFS.", "params": [
+    { "name": "FROMFILE", "description": "Source database file." },
+    { "name": "TOSTMF", "description": "Destination IFS stream file path." }
+  ]},
+  { "name": "CPYFRMIMPF", "syntax": "CPYFRMIMPF FROMSTMF('/path/file.csv') TOFILE(lib/file)", "description": "Copies data from a delimited stream file in the IFS into a database file.", "params": [
+    { "name": "FROMSTMF", "description": "Source IFS stream file path." },
+    { "name": "TOFILE", "description": "Destination database file." }
+  ]}
+]
