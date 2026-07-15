@@ -88,8 +88,7 @@
   #btnRecordToggle.active { background: var(--red); border-color: var(--red); color: white; animation: recordPulse 1.5s ease-in-out infinite; }
   @keyframes recordPulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
 
-  .field-editable { background: #13202c; border-bottom: 1px dashed var(--accent); cursor: pointer; border-radius: 2px; }
-  .field-editable:hover { background: #1c3347; }
+  .field-editable { background: #13202c; border-bottom: 1px dashed var(--accent); border-radius: 2px; }
   .field-protected { color: #9aa4b8; }
   .field-selected { background: var(--accent) !important; color: #05060a !important; }
   #fieldsTable tbody tr.clickable { cursor: pointer; }
@@ -110,6 +109,13 @@
   .cursor-block { background: rgba(110,224,110,.85); color: #05060a; animation: cursorBlink 1s step-end infinite; }
   @keyframes cursorBlink { 50% { background: transparent; color: inherit; } }
   #btnExitImmersive { position: fixed; top: 12px; right: 12px; z-index: 2000; background: var(--red); border-color: var(--red); color: white; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+
+  .step-list { margin-top: 14px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+  .step-row { padding: 6px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #1c2029; font-family: var(--mono); }
+  .step-row:last-child { border-bottom: none; }
+  .step-row:hover { background: #1e2330; }
+  .step-row.current { background: var(--accent); color: #05060a; font-weight: 600; }
+  .step-list.not-clickable .step-row { cursor: default; }
 </style>
 </head>
 <body>
@@ -159,26 +165,26 @@
     </div>
     <button id="btnExitImmersive" style="display:none">✕ Exit Immersive</button>
 
-    <div class="panel" id="recordPanel" style="display:none">
-      <h2>Recorded steps</h2>
-      <table id="recordTable"><thead><tr><th>Case</th><th>Step</th><th>Action</th><th>Target</th><th>Value</th><th>Expected</th></tr></thead><tbody></tbody></table>
-    </div>
-
     <div class="panel">
       <h2>Type into a field</h2>
-      <div class="muted" style="margin-bottom:8px">Click anywhere on the screen above (or a field row below) to move the real cursor there, then type on your keyboard — characters land exactly where the cursor is, just like a real terminal. <b>Tab</b>/<b>Shift+Tab</b> move to the next/previous field (same as the TAB/BACKTAB keypad buttons), <b>Enter</b> submits, <b>Backspace/Delete/Insert</b> work as on a real 5250 keyboard. Turn on <b>⛶ Immersive</b> for arrow-key cursor movement too.</div>
+      <div class="muted" style="margin-bottom:8px">Keyboard-driven, like a real 5250 terminal — the screen itself isn't mouse-clickable. Click a row in the field table below to jump the cursor there, then type on your keyboard — characters land exactly where the cursor is. <b>Tab</b>/<b>Shift+Tab</b> move to the next/previous field (same as the TAB/BACKTAB keypad buttons), <b>Enter</b> submits, <b>Backspace/Delete/Insert</b> work as on a real 5250 keyboard. Turn on <b>⛶ Immersive</b> for arrow-key cursor movement too.</div>
       <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Position the cursor in a command field to see docs here.</div></div>
     </div>
 
     <div class="panel">
       <h2>Detected fields <span class="muted" id="fieldsCount"></span></h2>
-      <div class="muted" style="margin-bottom:8px">Click a field on the screen above, or a row below, to fill in Row/Col and jump to Value.</div>
+      <div class="muted" style="margin-bottom:8px">Click a row to move the cursor to that field.</div>
       <table id="fieldsTable"><thead><tr><th>Row,Col</th><th>Len</th><th>Type</th><th>Value</th></tr></thead><tbody><tr><td colspan="4" class="muted">(not connected)</td></tr></tbody></table>
     </div>
 
     <div class="panel">
       <h2>Send key</h2>
       <div class="keypad" id="keypad"></div>
+    </div>
+
+    <div class="panel" id="recordPanel" style="display:none">
+      <h2>Recorded steps</h2>
+      <table id="recordTable"><thead><tr><th>Case</th><th>Step</th><th>Action</th><th>Target</th><th>Value</th><th>Expected</th></tr></thead><tbody></tbody></table>
     </div>
   </section>
 
@@ -232,6 +238,7 @@
           <div id="runningProgress" class="muted" style="margin-bottom:8px"></div>
           <div id="runningCurrent" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
           <div id="runningScreen">(waiting for screen…)</div>
+          <div id="runningSteps" class="step-list not-clickable"></div>
         </div>
 
         <div class="panel" id="resultsPanel" style="display:none">
@@ -260,6 +267,7 @@
       <span id="replayCounter" class="muted" style="min-width:80px; text-align:center"></span>
       <button id="replayNext">Next ▸</button>
     </div>
+    <div id="replaySteps" class="step-list"></div>
   </div>
 </div>
 
@@ -570,51 +578,17 @@ function screenGridHtml(screen) {
 
 // ---------- real terminal fidelity: the daemon's actual cursor drives everything ----------
 // No client-side field model, no "selected field" buffer. Characters go straight to
-// screen.sendKeys(text) at whatever the REAL cursor position is (Terminal.sendText); clicking
-// or arrowing calls screen.setCursor()/native UP-DOWN-LEFT-RIGHT keys. The GUI just reflects
-// server state every response, exactly like a real emulator talking to a real host.
+// screen.sendKeys(text) at whatever the REAL cursor position is (Terminal.sendText); arrowing
+// (immersive mode) calls native UP/DOWN/LEFT/RIGHT keys. The GUI just reflects server state
+// every response, exactly like a real emulator talking to a real host. Mouse clicks on the
+// screen itself are deliberately NOT wired to anything — cursor movement is keyboard-only, same
+// as a real 5250 terminal; the Detected Fields table below is the one mouse-driven shortcut kept
+// (an explicit, discrete control, not "the screen" itself).
 let lastScreenResp = null;
-let charW = 0, charH = 0; // measured once, monospace grid cell size in px
 
 function terminalTabActive() {
   return document.getElementById("view-terminal").classList.contains("active");
 }
-
-function measureCharCell() {
-  const probe = document.createElement("span");
-  probe.style.position = "absolute";
-  probe.style.visibility = "hidden";
-  probe.style.whiteSpace = "pre";
-  probe.className = "";
-  probe.textContent = "M";
-  const screenEl = $("screen");
-  const cs = getComputedStyle(screenEl);
-  probe.style.font = cs.font;
-  probe.style.fontFamily = cs.fontFamily;
-  probe.style.fontSize = cs.fontSize;
-  probe.style.lineHeight = cs.lineHeight;
-  document.body.appendChild(probe);
-  charW = probe.getBoundingClientRect().width || 8;
-  charH = probe.getBoundingClientRect().height || 16;
-  probe.remove();
-}
-
-// Translates a click inside #screen into a 1-based (row, col) on the 5250 grid. Each rendered
-// line is "NNN | " (6 chars) + 80 data columns, so col = clickX/charW - 6, row = clickY/charH + 1.
-function screenClickToRowCol(clientX, clientY) {
-  if (!charW) measureCharCell();
-  const rect = $("screen").getBoundingClientRect();
-  const padding = 13; // #screen's CSS padding (12px) + its 1px border, since getBoundingClientRect() measures the outer border edge
-  const col = Math.round((clientX - rect.left - padding) / charW) - 5;
-  const row = Math.floor((clientY - rect.top - padding) / charH) + 1;
-  return { row: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.rows : 24, row)),
-           col: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.cols : 80, col)) };
-}
-
-$("screen").addEventListener("click", (e) => {
-  const { row, col } = screenClickToRowCol(e.clientX, e.clientY);
-  queueTerminalAction(() => rpc("setcursor", { row, col }));
-});
 
 function renderFieldsTable(fields) {
   const tbody = document.querySelector("#fieldsTable tbody");
@@ -780,6 +754,11 @@ function openReplay(steps, title) {
   replaySteps = steps;
   replayIndex = 0;
   $("replayTitle").textContent = title;
+  $("replaySteps").innerHTML = replaySteps.map((s, i) =>
+    `<div class="step-row" data-index="${i}">${i + 1}. ${escapeHtml(s.label || "(unlabeled step)")}</div>`).join("");
+  $("replaySteps").querySelectorAll(".step-row").forEach(div => {
+    div.addEventListener("click", () => { replayIndex = parseInt(div.dataset.index, 10); showReplayStep(); });
+  });
   $("replayBackdrop").classList.add("show");
   showReplayStep();
 }
@@ -791,6 +770,9 @@ function showReplayStep() {
   $("replayCounter").textContent = (replayIndex + 1) + " / " + replaySteps.length;
   $("replayPrev").disabled = replayIndex === 0;
   $("replayNext").disabled = replayIndex === replaySteps.length - 1;
+  $("replaySteps").querySelectorAll(".step-row").forEach((div, i) => div.classList.toggle("current", i === replayIndex));
+  const cur = $("replaySteps").querySelector(".current");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
 }
 
 $("replayPrev").addEventListener("click", () => { if (replayIndex > 0) { replayIndex--; showReplayStep(); } });
@@ -1101,8 +1083,21 @@ $("btnRunScenarios").addEventListener("click", async () => {
   $("resultsPanel").style.display = "none";
   $("runningPanel").style.display = "block";
   $("runningScreen").style.display = $("headless").checked ? "none" : "block";
+  $("runningSteps").innerHTML = readScenarioTable().map((r, i) =>
+    `<div class="step-row" data-case="${escapeHtml(r.case || "")}" data-step="${escapeHtml(r.step || "")}">${i + 1}. `
+    + `${escapeHtml(r.case || "")} / step ${escapeHtml(r.step || "")}: ${escapeHtml(r.action || "")} `
+    + `${escapeHtml(r.target || "")} ${r.value ? "= " + escapeHtml(r.value) : ""}</div>`).join("");
   pollRun(startJson.runId, sid, $("headless").checked);
 });
+
+// Progress.report()/GenericStepFlow format this as "case <id> - step <n>/<total>: <action> ...";
+// parsed back out here to match against the step list built when the run started, so the row for
+// whatever's executing right now can be highlighted. Best-effort: a suite using "include" runs
+// expanded steps server-side that this client-side row list won't fully mirror.
+function parseCurrentStep(current) {
+  const m = /^case (.+?) - step (\d+)\/\d+:/.exec(current || "");
+  return m ? { case: m[1], step: m[2] } : null;
+}
 
 function pollRun(runId, sid, headless) {
   const timer = setInterval(async () => {
@@ -1115,6 +1110,12 @@ function pollRun(runId, sid, headless) {
 
     $("runningProgress").textContent = `${status.completed} / ${status.total} scenarios complete`;
     $("runningCurrent").textContent = status.current ? "▸ " + status.current : "";
+    const cur = parseCurrentStep(status.current);
+    $("runningSteps").querySelectorAll(".step-row").forEach(div => {
+      div.classList.toggle("current", !!cur && div.dataset.case === cur.case && div.dataset.step === cur.step);
+    });
+    const highlighted = $("runningSteps").querySelector(".current");
+    if (highlighted) highlighted.scrollIntoView({ block: "nearest" });
 
     if (!headless && screenRes) {
       const screen = await screenRes.json();
