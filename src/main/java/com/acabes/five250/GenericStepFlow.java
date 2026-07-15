@@ -232,10 +232,25 @@ public final class GenericStepFlow implements Flow {
 
     private void doType(Terminal t, String target, String value) {
         if (target.startsWith("label:")) {
+            // A label that can't be found at all is a strong signal the flow has landed on a
+            // genuinely different screen than expected — worth stopping the case for, so this
+            // stays strict (typeLabel throws if no field is found near the label).
             t.typeLabel(new String[]{target.substring(6)}, value);
         } else if (target.contains(",")) {
+            // Recorded row/col "type" rows come from live character-by-character typing
+            // (Terminal.sendText at the real cursor — see RecordingState.appendTypedChar), which
+            // never throws for "nothing registered here": screen.sendKeys() just types wherever
+            // the cursor is, silently having no visible effect if that position isn't inside a
+            // real field. Replaying through the OLD typeAt()/findByPosition() path — which DOES
+            // throw in that case — was stricter than what actually happened live, aborting runs
+            // at steps that never failed during recording. Use the same primitives that recorded
+            // it (setCursor + sendText) so replay reproduces exactly what happened, including a
+            // step quietly doing nothing, not a check the live session never enforced.
             String[] parts = target.split(",");
-            t.typeAt(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()), value);
+            int row = Integer.parseInt(parts[0].trim());
+            int col = Integer.parseInt(parts[1].trim());
+            t.setCursor(row, col);
+            t.sendText(value);
         } else {
             throw new RuntimeException("type target must be 'label:<text>' or '<row>,<col>', got: " + target);
         }
