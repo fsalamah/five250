@@ -87,6 +87,15 @@
   #runningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #05060a; color: #6ee06e; padding: 10px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
   #btnRecordToggle.active { background: var(--red); border-color: var(--red); color: white; animation: recordPulse 1.5s ease-in-out infinite; }
   @keyframes recordPulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
+
+  .field-editable { background: #13202c; border-bottom: 1px dashed var(--accent); cursor: pointer; border-radius: 2px; }
+  .field-editable:hover { background: #1c3347; }
+  .field-protected { color: #9aa4b8; }
+  .field-selected { background: var(--accent) !important; color: #05060a !important; }
+  #fieldsTable tbody tr.clickable { cursor: pointer; }
+  #fieldsTable tbody tr.clickable:hover { background: #1e2330; }
+  #fieldsTable tbody tr.field-selected td { background: var(--accent); color: #05060a; }
+  #fieldsTable td.mono, #fieldsTable td.value { font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -150,6 +159,12 @@
         <button class="primary" id="btnType">Type</button>
       </div>
       <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Start typing a CL command in Value for suggestions and docs.</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Detected fields <span class="muted" id="fieldsCount"></span></h2>
+      <div class="muted" style="margin-bottom:8px">Click a field on the screen above, or a row below, to fill in Row/Col and jump to Value.</div>
+      <table id="fieldsTable"><thead><tr><th>Row,Col</th><th>Len</th><th>Type</th><th>Value</th></tr></thead><tbody><tr><td colspan="4" class="muted">(not connected)</td></tr></tbody></table>
     </div>
 
     <div class="panel">
@@ -482,9 +497,88 @@ function screenGridText(screen) {
   return lines.join("\n");
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Renders the screen with every detected field wrapped in a clickable span, so the terminal
+// itself behaves like a real 5250 emulator (click a field to select it) instead of requiring
+// the user to already know a field's row/col or label text.
+function screenGridHtml(screen) {
+  if (!screen || !screen.text) return "(no screen captured)";
+  const fieldsByRow = {};
+  (screen.fields || []).forEach(f => { (fieldsByRow[f.row] = fieldsByRow[f.row] || []).push(f); });
+  let lines = [];
+  for (let r = 0; r < screen.rows; r++) {
+    const rowNum = r + 1;
+    const rowText = screen.text.slice(r * screen.cols, (r + 1) * screen.cols).replace(/\s+$/, "");
+    const rowFields = (fieldsByRow[rowNum] || []).slice().sort((a, b) => a.col - b.col);
+    let html = "", pos = 0;
+    rowFields.forEach(f => {
+      const start = f.col - 1;
+      if (start >= rowText.length || start < pos) return;
+      const end = Math.min(start + f.length, rowText.length);
+      if (start > pos) html += escapeHtml(rowText.slice(pos, start));
+      const seg = rowText.slice(start, end);
+      const cls = f.protected ? "field-protected" : "field-editable";
+      html += `<span class="${cls}" data-row="${f.row}" data-col="${f.col}" data-protected="${f.protected}">${escapeHtml(seg)}</span>`;
+      pos = end;
+    });
+    if (pos < rowText.length) html += escapeHtml(rowText.slice(pos));
+    lines.push(String(rowNum).padStart(3, " ") + " | " + html);
+  }
+  return lines.join("\n");
+}
+
+function selectField(row, col, value) {
+  $("typeLabel").value = "";
+  $("typeRow").value = row;
+  $("typeCol").value = col;
+  $("typeValue").value = value || "";
+  $("typeValue").focus();
+  $("typeValue").select();
+  document.querySelectorAll(".field-selected").forEach(el => el.classList.remove("field-selected"));
+  document.querySelectorAll(`#screen .field-editable[data-row="${row}"][data-col="${col}"]`).forEach(el => el.classList.add("field-selected"));
+  document.querySelectorAll(`#fieldsTable tr[data-row="${row}"][data-col="${col}"]`).forEach(el => el.classList.add("field-selected"));
+}
+
+$("screen").addEventListener("click", (e) => {
+  const span = e.target.closest(".field-editable, .field-protected");
+  if (!span) return;
+  const row = parseInt(span.dataset.row, 10), col = parseInt(span.dataset.col, 10);
+  if (span.dataset.protected === "true") {
+    toast(`Protected field @ ${row},${col}: "${span.textContent.trim()}" — read-only, use Check/Extract`);
+    return;
+  }
+  selectField(row, col, span.textContent.trim());
+});
+
+function renderFieldsTable(fields) {
+  const tbody = document.querySelector("#fieldsTable tbody");
+  fields = fields || [];
+  $("fieldsCount").textContent = fields.length ? `(${fields.length})` : "";
+  if (!fields.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">No fields on this screen</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = fields.map(f => `
+    <tr data-row="${f.row}" data-col="${f.col}" class="${f.protected ? "" : "clickable"}">
+      <td class="mono">${f.row},${f.col}</td>
+      <td>${f.length}</td>
+      <td>${f.protected ? "protected" : (f.numeric ? "numeric" : "text")}</td>
+      <td class="value">${escapeHtml(f.value || "")}</td>
+    </tr>`).join("");
+  tbody.querySelectorAll("tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      selectField(parseInt(tr.dataset.row, 10), parseInt(tr.dataset.col, 10), tr.querySelector(".value").textContent);
+    });
+  });
+}
+
 function renderScreen(resp) {
   if (!resp.text) return;
-  $("screen").textContent = screenGridText(resp);
+  $("screen").innerHTML = screenGridHtml(resp);
+  renderFieldsTable(resp.fields);
   $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
   $("status").textContent = "connected (" + $("sessionId").value + ")";
   $("status").classList.add("connected");
@@ -541,6 +635,7 @@ $("btnConnect").addEventListener("click", async () => {
 
 $("btnDisconnect").addEventListener("click", async () => {
   try { await rpc("disconnect"); $("screen").textContent = "(not connected)"; $("oiaLine").textContent = "";
+    renderFieldsTable([]);
     $("status").textContent = "not connected"; $("status").classList.remove("connected"); toast("Disconnected"); } catch (e) {}
 });
 
