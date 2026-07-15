@@ -14,6 +14,17 @@ public final class HelpText {
     static final Map<String, Entry> ENTRIES = new LinkedHashMap<>();
 
     static {
+        ENTRIES.put("serve", new Entry(
+            "Start the daemon + GUI, no host/session needed",
+            "five250 serve",
+            "Starts the background daemon (TCP 25250 + HTTP/GUI 25251) if it isn't already running "
+                + "and exits immediately - no connection, no session. For driving everything "
+                + "(Connect included) from the browser instead of the CLI. Running the jar with no "
+                + "arguments at all does the same thing, then also shows this command list.",
+            List.of(),
+            List.of("five250 serve", "java -jar five250.jar")
+        ));
+
         ENTRIES.put("connect", new Entry(
             "Open a live 5250 session to an IBM i host",
             "five250 connect --host <host> [--port <port>] [--ssl] [--session <id>]",
@@ -166,7 +177,7 @@ public final class HelpText {
 
     public static void printGeneral() {
         System.out.println("five250 <command> [options]\n");
-        System.out.println("The daemon also serves a GUI at http://127.0.0.1:" + HttpApi.PORT + " once any command has run.\n");
+        System.out.println("Run with no command (or `serve`) to just bring up the GUI at http://127.0.0.1:" + HttpApi.PORT + ".\n");
         int width = ENTRIES.keySet().stream().mapToInt(String::length).max().orElse(10);
         for (Map.Entry<String, Entry> e : ENTRIES.entrySet()) {
             System.out.printf("  %-" + width + "s  %s%n", e.getKey(), e.getValue().summary());

@@ -11,6 +11,9 @@ and run `five250 <command> ...` directly. `five250 help [command]` gives full
 usage/options/examples. The daemon auto-starts on first use and stays up
 across commands (127.0.0.1:25250 TCP + 25251 HTTP/GUI); each CLI invocation
 is a fast, separate JVM call that talks to the same long-lived daemon.
+Running the jar with **no command at all** (or `five250 serve`) just starts
+the daemon+GUI and stops there — for driving everything, Connect included,
+from the browser instead of the CLI.
 
 **Package is self-contained** (`Home.java`): `scenarios/` and `docs/` resolve
 relative to the running jar's own directory, not the current working

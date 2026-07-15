@@ -21,9 +21,15 @@ import java.util.Map;
 public final class Cli {
 
     public static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            printUsage();
-            System.exit(1);
+        // Running the jar plain (no command) or "serve" both just bring up the daemon + GUI and
+        // stop there — for someone who wants to do everything (Connect included) from the
+        // browser instead of the CLI, requiring a full "connect --host --port" first just to
+        // get the portal open was a real, reported point of confusion.
+        if (args.length == 0 || args[0].equals("serve")) {
+            ensureDaemonRunning();
+            System.out.println("GUI is up at http://127.0.0.1:" + HttpApi.PORT);
+            if (args.length == 0) { System.out.println(); printUsage(); }
+            return;
         }
 
         if (args[0].equals("daemon")) {
