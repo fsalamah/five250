@@ -96,6 +96,11 @@
   #fieldsTable tbody tr.clickable:hover { background: #1e2330; }
   #fieldsTable tbody tr.field-selected td { background: var(--accent); color: #05060a; }
   #fieldsTable td.mono, #fieldsTable td.value { font-family: var(--mono); }
+  .inline-field-input {
+    font-family: var(--mono); font-size: 13px; line-height: 1.35;
+    background: #223049; color: #eafff0; border: none; outline: 1px solid var(--accent);
+    padding: 0; margin: 0; border-radius: 2px; caret-color: #eafff0;
+  }
 </style>
 </head>
 <body>
@@ -150,15 +155,8 @@
 
     <div class="panel">
       <h2>Type into a field</h2>
-      <div class="row">
-        <label>Label</label><input id="typeLabel" autocomplete="off" placeholder="e.g. User" style="width:160px">
-        <span class="muted">or</span>
-        <label>Row</label><input id="typeRow" autocomplete="off" style="width:50px">
-        <label>Col</label><input id="typeCol" autocomplete="off" style="width:50px">
-        <label>Value</label><input id="typeValue" style="width:220px" autocomplete="off" placeholder="e.g. WRKACTJOB">
-        <button class="primary" id="btnType">Type</button>
-      </div>
-      <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Start typing a CL command in Value for suggestions and docs.</div></div>
+      <div class="muted" style="margin-bottom:8px">Click directly on a field on the screen above (or a row in the table below) and type on your keyboard. <b>Tab</b>/<b>Shift+Tab</b> moves between fields, <b>Enter</b> submits, <b>Escape</b> cancels the current edit.</div>
+      <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Click a field and start typing a CL command for suggestions and docs.</div></div>
     </div>
 
     <div class="panel">
@@ -501,9 +499,8 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// Renders the screen with every detected field wrapped in a clickable span, so the terminal
-// itself behaves like a real 5250 emulator (click a field to select it) instead of requiring
-// the user to already know a field's row/col or label text.
+// Renders the screen with every detected field wrapped in a span, so the terminal itself
+// behaves like a real 5250 emulator: click a field, type on the keyboard, no side panel.
 function screenGridHtml(screen) {
   if (!screen || !screen.text) return "(no screen captured)";
   const fieldsByRow = {};
@@ -521,7 +518,7 @@ function screenGridHtml(screen) {
       if (start > pos) html += escapeHtml(rowText.slice(pos, start));
       const seg = rowText.slice(start, end);
       const cls = f.protected ? "field-protected" : "field-editable";
-      html += `<span class="${cls}" data-row="${f.row}" data-col="${f.col}" data-protected="${f.protected}">${escapeHtml(seg)}</span>`;
+      html += `<span class="${cls}" data-row="${f.row}" data-col="${f.col}" data-len="${f.length}" data-protected="${f.protected}">${escapeHtml(seg)}</span>`;
       pos = end;
     });
     if (pos < rowText.length) html += escapeHtml(rowText.slice(pos));
@@ -530,16 +527,77 @@ function screenGridHtml(screen) {
   return lines.join("\n");
 }
 
-function selectField(row, col, value) {
-  $("typeLabel").value = "";
-  $("typeRow").value = row;
-  $("typeCol").value = col;
-  $("typeValue").value = value || "";
-  $("typeValue").focus();
-  $("typeValue").select();
-  document.querySelectorAll(".field-selected").forEach(el => el.classList.remove("field-selected"));
-  document.querySelectorAll(`#screen .field-editable[data-row="${row}"][data-col="${col}"]`).forEach(el => el.classList.add("field-selected"));
+// ---------- inline field editing (real-terminal fidelity: click a field, type on the screen) ----------
+let activeField = null;       // { row, col, len, inputEl } | null
+let lastScreenResp = null;
+let editableFields = [];      // non-protected fields on the current screen, sorted row-major
+
+function computeEditableFields(fields) {
+  return (fields || []).filter(f => !f.protected).slice().sort((a, b) => a.row - b.row || a.col - b.col);
+}
+
+function findFieldSpan(row, col) {
+  return document.querySelector(`#screen .field-editable[data-row="${row}"][data-col="${col}"]`);
+}
+
+function terminalTabActive() {
+  return document.getElementById("view-terminal").classList.contains("active");
+}
+
+function activateField(row, col, opts) {
+  opts = opts || {};
+  if (activeField && activeField.row === row && activeField.col === col) {
+    activeField.inputEl.focus();
+    return true;
+  }
+  const span = findFieldSpan(row, col);
+  if (!span) return false;
+  commitActiveField();
+  const len = parseInt(span.dataset.len, 10) || Math.max(span.textContent.length, 1);
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "inline-field-input";
+  input.maxLength = len;
+  input.style.width = len + "ch";
+  input.value = span.textContent.trim();
+  input.autocomplete = "off";
+  input.dataset.row = row; input.dataset.col = col; input.dataset.len = len;
+  span.replaceWith(input);
+  activeField = { row, col, len, inputEl: input };
+  input.focus();
+  if (!opts.noSelect) input.select();
+  attachCommandAutocomplete(input, $("typeDocsPanel"));
+  input.addEventListener("blur", () => {
+    // deferred so a click on another field (or an autocomplete item) registers first
+    setTimeout(() => { if (activeField && activeField.inputEl === input) commitActiveField(); }, 120);
+  });
+  document.querySelectorAll("#fieldsTable tr.field-selected").forEach(el => el.classList.remove("field-selected"));
   document.querySelectorAll(`#fieldsTable tr[data-row="${row}"][data-col="${col}"]`).forEach(el => el.classList.add("field-selected"));
+  return true;
+}
+
+// Commits the currently-active field's typed value to the daemon (a local buffer write in
+// tn5250j, not a host round-trip — the host only sees it once an AID key is sent) and
+// re-renders from the response, same as any other action.
+function commitActiveField() {
+  if (!activeField) return Promise.resolve();
+  const { row, col, inputEl } = activeField;
+  activeField = null;
+  const value = inputEl.value;
+  return rpc("type", { row, col, value }).then(resp => { renderScreen(resp); }).catch(() => {});
+}
+
+function cancelActiveField() {
+  activeField = null;
+  if (lastScreenResp) renderScreen(lastScreenResp);
+}
+
+function adjacentEditableField(row, col, dir) {
+  if (!editableFields.length) return null;
+  let idx = editableFields.findIndex(f => f.row === row && f.col === col);
+  if (idx === -1) idx = dir > 0 ? -1 : 0;
+  idx = (idx + dir + editableFields.length) % editableFields.length;
+  return editableFields[idx];
 }
 
 $("screen").addEventListener("click", (e) => {
@@ -550,7 +608,7 @@ $("screen").addEventListener("click", (e) => {
     toast(`Protected field @ ${row},${col}: "${span.textContent.trim()}" — read-only, use Check/Extract`);
     return;
   }
-  selectField(row, col, span.textContent.trim());
+  activateField(row, col);
 });
 
 function renderFieldsTable(fields) {
@@ -570,19 +628,74 @@ function renderFieldsTable(fields) {
     </tr>`).join("");
   tbody.querySelectorAll("tr.clickable").forEach(tr => {
     tr.addEventListener("click", () => {
-      selectField(parseInt(tr.dataset.row, 10), parseInt(tr.dataset.col, 10), tr.querySelector(".value").textContent);
+      activateField(parseInt(tr.dataset.row, 10), parseInt(tr.dataset.col, 10));
     });
   });
 }
 
 function renderScreen(resp) {
   if (!resp.text) return;
+  lastScreenResp = resp;
+  editableFields = computeEditableFields(resp.fields);
+  activeField = null; // the old input element, if any, is discarded by the innerHTML replace below
   $("screen").innerHTML = screenGridHtml(resp);
   renderFieldsTable(resp.fields);
   $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
   $("status").textContent = "connected (" + $("sessionId").value + ")";
   $("status").classList.add("connected");
+  // Real terminal fidelity: the host positions the cursor (e.g. straight to the User field on
+  // sign-on, or back onto a field that failed validation) — honor that instead of leaving
+  // every field inert until the user clicks one.
+  if (resp.cursor) {
+    const f = editableFields.find(f => f.row === resp.cursor.row && resp.cursor.col >= f.col && resp.cursor.col < f.col + f.length);
+    if (f && terminalTabActive()) activateField(f.row, f.col, { noSelect: true });
+  }
 }
+
+// ---------- keyboard capture: block the browser's own shortcuts for Tab/Enter/F-keys/paging
+// while on the Terminal tab, and route them into the 5250 session instead. Browsers reserve a
+// handful of combos (F11 fullscreen, F12 devtools, Ctrl+W/T/N tab & window management, and in
+// most browsers F5/Ctrl+R refresh) at the OS/chrome level — no web page, this one included, can
+// intercept those; everything else below is captured. ----------
+document.addEventListener("keydown", (e) => {
+  if (!terminalTabActive() || !$("status").classList.contains("connected")) return;
+
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const cur = activeField;
+    Promise.resolve(cur ? commitActiveField() : null).then(() => {
+      const target = cur ? adjacentEditableField(cur.row, cur.col, e.shiftKey ? -1 : 1) : editableFields[0];
+      if (target) activateField(target.row, target.col);
+    });
+    return;
+  }
+
+  if (e.key === "Escape") {
+    if (activeField) { e.preventDefault(); cancelActiveField(); }
+    return;
+  }
+
+  if (e.key === "Home" && !e.ctrlKey) {
+    e.preventDefault();
+    Promise.resolve(commitActiveField()).then(() => {
+      if (editableFields[0]) activateField(editableFields[0].row, editableFields[0].col);
+    });
+    return;
+  }
+
+  let aid = null;
+  if (e.key === "Enter") aid = "ENTER";
+  else if (/^F([1-9]|1[0-2])$/.test(e.key)) {
+    const n = parseInt(e.key.slice(1), 10);
+    aid = "F" + (e.shiftKey ? n + 12 : n); // Shift+F1..F12 -> F13..F24 (no physical F13-F24 on most keyboards)
+  } else if (e.key === "PageUp") aid = "PAGE_UP";
+  else if (e.key === "PageDown") aid = "PAGE_DOWN";
+
+  if (aid) {
+    e.preventDefault();
+    Promise.resolve(commitActiveField()).then(() => rpc("key", { key: aid })).then(resp => { if (resp) renderScreen(resp); }).catch(() => {});
+  }
+}, true);
 
 // Reflects the ACTUAL server-side session state, not just Terminal-tab button clicks — so a
 // session a suite auto-connected (via a "connect" step) shows up here too, not just ones
@@ -657,32 +770,13 @@ $("btnSignon").addEventListener("click", async () => {
   } catch (e) {}
 });
 
-$("btnType").addEventListener("click", async () => {
-  try {
-    const label = $("typeLabel").value.trim(), row = $("typeRow").value.trim(), col = $("typeCol").value.trim(), value = $("typeValue").value;
-    let extra;
-    if (label) {
-      extra = { label, value };
-    } else if (row && col) {
-      extra = { row: parseInt(row, 10), col: parseInt(col, 10), value };
-    } else {
-      toast("Enter a Label, or both Row and Col");
-      return;
-    }
-    const resp = await rpc("type", extra);
-    renderScreen(resp);
-  } catch (e) {}
-});
-
 const keypad = $("keypad");
 KEYS.forEach(k => {
   const b = document.createElement("button");
   b.textContent = k; b.className = "small";
-  b.addEventListener("click", async () => { try { renderScreen(await rpc("key", { key: k })); } catch (e) {} });
+  b.addEventListener("click", async () => { try { await commitActiveField(); renderScreen(await rpc("key", { key: k })); } catch (e) {} });
   keypad.appendChild(b);
 });
-
-attachCommandAutocomplete($("typeValue"), $("typeDocsPanel"));
 
 // ---------- scenarios: project explorer ----------
 let currentColumns = [];
