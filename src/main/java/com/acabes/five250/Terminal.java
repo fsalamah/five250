@@ -126,6 +126,30 @@ public final class Terminal {
         screen.sendKeys(key);
     }
 
+    /**
+     * Types literal characters at the CURRENT cursor position, exactly like a real terminal:
+     * the cursor advances naturally, field boundaries and protected areas behave exactly as
+     * tn5250j's own keyboard handling dictates (this is the same entry point the Swing UI's key
+     * listener uses) — no row/col/label targeting needed. Pure local buffer edit, no host
+     * round-trip, same as typeAt/typeLabel.
+     */
+    public synchronized void sendText(String text) {
+        requireConnected();
+        screen.sendKeys(text);
+    }
+
+    /**
+     * Moves the real cursor to an exact position, for click-to-place-cursor in the GUI.
+     * screen.setCursor() uses the same coordinate convention as getCurrentRow()/getCurrentCol()
+     * (verified by round-trip: setCursor(row, col) followed by a snapshot reports the identical
+     * row/col back) — unlike ScreenField.startRow()/startCol(), which really are 0-based. No
+     * conversion here.
+     */
+    public synchronized void setCursor(int row, int col) {
+        requireConnected();
+        screen.setCursor(row, col);
+    }
+
     /** Reads the current value of the (editable) field to the right of a label. */
     public synchronized String readLabel(String label) {
         requireConnected();

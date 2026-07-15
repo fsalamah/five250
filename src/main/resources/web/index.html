@@ -107,6 +107,10 @@
   body.immersive #terminalScreenPanel { margin-bottom: 0; }
   body.immersive #screen { font-size: 16px; min-height: 70vh; }
   body.immersive header { padding: 6px 12px; }
+  #terminalScreenPanel { position: relative; }
+  .cursor-overlay { position: absolute; background: rgba(110,224,110,.55); pointer-events: none; animation: cursorBlink 1s step-end infinite; border-radius: 1px; }
+  @keyframes cursorBlink { 50% { opacity: .15; } }
+  #btnExitImmersive { position: fixed; top: 12px; right: 12px; z-index: 2000; background: var(--red); border-color: var(--red); color: white; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
 </style>
 </head>
 <body>
@@ -155,15 +159,17 @@
     </div>
 
     <div class="panel" id="terminalScreenPanel">
-      <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ⛶ Immersive again to also turn off keyboard capture.</span></h2>
+      <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ✕ below or ⛶ Immersive again to also turn off keyboard capture.</span></h2>
       <div id="screen">(not connected)</div>
+      <div id="cursorOverlay" class="cursor-overlay" style="display:none"></div>
       <div id="oiaLine"></div>
     </div>
+    <button id="btnExitImmersive" style="display:none">✕ Exit Immersive</button>
 
     <div class="panel">
       <h2>Type into a field</h2>
-      <div class="muted" style="margin-bottom:8px">Click directly on a field on the screen above (or a row in the table below) and type on your keyboard. <b>Tab</b>/<b>Shift+Tab</b> moves between fields, <b>Enter</b> submits, <b>Escape</b> cancels the current edit.</div>
-      <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Click a field and start typing a CL command for suggestions and docs.</div></div>
+      <div class="muted" style="margin-bottom:8px">Click anywhere on the screen above (or a field row below) to move the real cursor there, then type on your keyboard — characters land exactly where the cursor is, just like a real terminal. <b>Tab</b>/<b>Shift+Tab</b> move to the next/previous field (same as the TAB/BACKTAB keypad buttons), <b>Enter</b> submits, <b>Backspace/Delete/Insert</b> work as on a real 5250 keyboard. Turn on <b>⛶ Immersive</b> for arrow-key cursor movement too.</div>
+      <div class="docs-panel" id="typeDocsPanel"><div class="docs-empty">Position the cursor in a command field to see docs here.</div></div>
     </div>
 
     <div class="panel">
@@ -285,7 +291,9 @@ function renderCommandDocs(panel, cmd) {
     ${params ? '<div class="docs-params">' + params + '</div>' : ""}`;
 }
 
-/** Attaches type-ahead suggestions + a live docs panel to a text input, IDE-style. */
+/** Attaches type-ahead suggestions + a live docs panel to a text input, IDE-style. Used by the
+ * Scenarios tab's CSV cell editor (the "command" column) — the Terminal tab's live typing has
+ * no input box to attach this to, it uses updateDocsFromCursorField() instead. */
 function attachCommandAutocomplete(input, docsPanel) {
   let dropdown = null, items = [], activeIndex = -1;
 
@@ -534,88 +542,65 @@ function screenGridHtml(screen) {
   return lines.join("\n");
 }
 
-// ---------- inline field editing (real-terminal fidelity: click a field, type on the screen) ----------
-let activeField = null;       // { row, col, len, inputEl } | null
+// ---------- real terminal fidelity: the daemon's actual cursor drives everything ----------
+// No client-side field model, no "selected field" buffer. Characters go straight to
+// screen.sendKeys(text) at whatever the REAL cursor position is (Terminal.sendText); clicking
+// or arrowing calls screen.setCursor()/native UP-DOWN-LEFT-RIGHT keys. The GUI just reflects
+// server state every response, exactly like a real emulator talking to a real host.
 let lastScreenResp = null;
-let editableFields = [];      // non-protected fields on the current screen, sorted row-major
-
-function computeEditableFields(fields) {
-  return (fields || []).filter(f => !f.protected).slice().sort((a, b) => a.row - b.row || a.col - b.col);
-}
-
-function findFieldSpan(row, col) {
-  return document.querySelector(`#screen .field-editable[data-row="${row}"][data-col="${col}"]`);
-}
+let charW = 0, charH = 0; // measured once, monospace grid cell size in px
 
 function terminalTabActive() {
   return document.getElementById("view-terminal").classList.contains("active");
 }
 
-function activateField(row, col, opts) {
-  opts = opts || {};
-  if (activeField && activeField.row === row && activeField.col === col) {
-    activeField.inputEl.focus();
-    return true;
-  }
-  const span = findFieldSpan(row, col);
-  if (!span) return false;
-  commitActiveField();
-  const len = parseInt(span.dataset.len, 10) || Math.max(span.textContent.length, 1);
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "inline-field-input";
-  input.maxLength = len;
-  input.style.width = len + "ch";
-  input.value = span.textContent.trim();
-  input.autocomplete = "off";
-  input.dataset.row = row; input.dataset.col = col; input.dataset.len = len;
-  span.replaceWith(input);
-  activeField = { row, col, len, inputEl: input };
-  input.focus();
-  if (!opts.noSelect) input.select();
-  attachCommandAutocomplete(input, $("typeDocsPanel"));
-  input.addEventListener("blur", () => {
-    // deferred so a click on another field (or an autocomplete item) registers first
-    setTimeout(() => { if (activeField && activeField.inputEl === input) commitActiveField(); }, 120);
-  });
-  document.querySelectorAll("#fieldsTable tr.field-selected").forEach(el => el.classList.remove("field-selected"));
-  document.querySelectorAll(`#fieldsTable tr[data-row="${row}"][data-col="${col}"]`).forEach(el => el.classList.add("field-selected"));
-  return true;
+function measureCharCell() {
+  const probe = document.createElement("span");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.whiteSpace = "pre";
+  probe.className = "";
+  probe.textContent = "M";
+  const screenEl = $("screen");
+  const cs = getComputedStyle(screenEl);
+  probe.style.font = cs.font;
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontSize = cs.fontSize;
+  probe.style.lineHeight = cs.lineHeight;
+  document.body.appendChild(probe);
+  charW = probe.getBoundingClientRect().width || 8;
+  charH = probe.getBoundingClientRect().height || 16;
+  probe.remove();
 }
 
-// Commits the currently-active field's typed value to the daemon (a local buffer write in
-// tn5250j, not a host round-trip — the host only sees it once an AID key is sent) and
-// re-renders from the response, same as any other action.
-function commitActiveField() {
-  if (!activeField) return Promise.resolve();
-  const { row, col, inputEl } = activeField;
-  activeField = null;
-  const value = inputEl.value;
-  return rpc("type", { row, col, value }).then(resp => { renderScreen(resp); }).catch(() => {});
+// Translates a click inside #screen into a 1-based (row, col) on the 5250 grid. Each rendered
+// line is "NNN | " (6 chars) + 80 data columns, so col = clickX/charW - 6, row = clickY/charH + 1.
+function screenClickToRowCol(clientX, clientY) {
+  if (!charW) measureCharCell();
+  const rect = $("screen").getBoundingClientRect();
+  const padding = 12; // matches #screen's CSS padding
+  const col = Math.round((clientX - rect.left - padding) / charW) - 5;
+  const row = Math.floor((clientY - rect.top - padding) / charH) + 1;
+  return { row: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.rows : 24, row)),
+           col: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.cols : 80, col)) };
 }
 
-function cancelActiveField() {
-  activeField = null;
-  if (lastScreenResp) renderScreen(lastScreenResp);
-}
-
-function adjacentEditableField(row, col, dir) {
-  if (!editableFields.length) return null;
-  let idx = editableFields.findIndex(f => f.row === row && f.col === col);
-  if (idx === -1) idx = dir > 0 ? -1 : 0;
-  idx = (idx + dir + editableFields.length) % editableFields.length;
-  return editableFields[idx];
+function positionCursorOverlay(resp) {
+  if (!charW) measureCharCell();
+  const overlay = $("cursorOverlay");
+  if (!resp || !resp.cursor) { overlay.style.display = "none"; return; }
+  const screenEl = $("screen");
+  const padding = 12; // #screen's own CSS padding; overlay is a sibling, not a child (innerHTML wipes children)
+  overlay.style.display = "";
+  overlay.style.left = (screenEl.offsetLeft + padding + (5 + resp.cursor.col) * charW) + "px";
+  overlay.style.top = (screenEl.offsetTop + padding + (resp.cursor.row - 1) * charH) + "px";
+  overlay.style.width = charW + "px";
+  overlay.style.height = charH + "px";
 }
 
 $("screen").addEventListener("click", (e) => {
-  const span = e.target.closest(".field-editable, .field-protected");
-  if (!span) return;
-  const row = parseInt(span.dataset.row, 10), col = parseInt(span.dataset.col, 10);
-  if (span.dataset.protected === "true") {
-    toast(`Protected field @ ${row},${col}: "${span.textContent.trim()}" — read-only, use Check/Extract`);
-    return;
-  }
-  activateField(row, col);
+  const { row, col } = screenClickToRowCol(e.clientX, e.clientY);
+  rpc("setcursor", { row, col }).then(resp => renderScreen(resp)).catch(() => {});
 });
 
 function renderFieldsTable(fields) {
@@ -635,58 +620,44 @@ function renderFieldsTable(fields) {
     </tr>`).join("");
   tbody.querySelectorAll("tr.clickable").forEach(tr => {
     tr.addEventListener("click", () => {
-      activateField(parseInt(tr.dataset.row, 10), parseInt(tr.dataset.col, 10));
+      rpc("setcursor", { row: parseInt(tr.dataset.row, 10), col: parseInt(tr.dataset.col, 10) })
+        .then(resp => renderScreen(resp)).catch(() => {});
     });
   });
+}
+
+// With no dedicated input box to attach a dropdown to anymore (typing lands straight on the
+// real terminal, at the real cursor), CL autocomplete becomes passive: whatever field the
+// cursor sits in gets checked against the command table and its docs shown, no click-to-fill.
+function updateDocsFromCursorField(resp) {
+  const panel = $("typeDocsPanel");
+  if (!panel) return;
+  const f = (resp.fields || []).find(f => !f.protected && f.row === resp.cursor.row && resp.cursor.col >= f.col && resp.cursor.col < f.col + f.length);
+  const verb = f && f.value ? f.value.trim().split(/\s+/)[0].toUpperCase() : "";
+  renderCommandDocs(panel, verb ? CL_COMMANDS.find(c => c.name === verb) || null : null);
 }
 
 function renderScreen(resp) {
   if (!resp.text) return;
   lastScreenResp = resp;
-  editableFields = computeEditableFields(resp.fields);
-  activeField = null; // the old input element, if any, is discarded by the innerHTML replace below
   $("screen").innerHTML = screenGridHtml(resp);
   renderFieldsTable(resp.fields);
+  positionCursorOverlay(resp);
+  updateDocsFromCursorField(resp);
   $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
   $("status").textContent = "connected (" + $("sessionId").value + ")";
   $("status").classList.add("connected");
-  // Real terminal fidelity: the host positions the cursor (e.g. straight to the User field on
-  // sign-on, or back onto a field that failed validation) — honor that instead of leaving
-  // every field inert until the user clicks one.
-  if (resp.cursor) {
-    const f = editableFields.find(f => f.row === resp.cursor.row && resp.cursor.col >= f.col && resp.cursor.col < f.col + f.length);
-    if (f && terminalTabActive()) activateField(f.row, f.col, { noSelect: true });
-  }
 }
 
-// ---------- immersive mode: fullscreen + arrow-key field-to-field navigation ----------
+// ---------- immersive mode: fullscreen + arrow-key cursor movement ----------
 let immersiveMode = false;
-
-function nearestFieldInRow(rowFields, col) {
-  return rowFields.slice().sort((a, b) => Math.abs(a.col - col) - Math.abs(b.col - col))[0];
-}
-
-// Real 5250 arrow keys move a free character cursor; this codebase only knows field boundaries
-// (no per-character cursor RPC), so arrows approximate it by jumping to the nearest field in the
-// adjacent row (Up/Down) or the previous/next field (Left/Right at a field's edge) — the closest
-// fidelity achievable without a raw cursor-move endpoint.
-function arrowField(row, col, dir) {
-  if (!editableFields.length) return null;
-  if (dir === "left") return adjacentEditableField(row, col, -1);
-  if (dir === "right") return adjacentEditableField(row, col, 1);
-  const rows = [...new Set(editableFields.map(f => f.row))].sort((a, b) => a - b);
-  let targetRow;
-  if (dir === "down") targetRow = rows.find(r => r > row);
-  else targetRow = rows.slice().reverse().find(r => r < row);
-  if (targetRow === undefined) targetRow = dir === "down" ? rows[0] : rows[rows.length - 1]; // wrap around
-  return nearestFieldInRow(editableFields.filter(f => f.row === targetRow), col);
-}
 
 async function setImmersive(on) {
   immersiveMode = on;
   document.body.classList.toggle("immersive", on);
   $("btnImmersive").classList.toggle("active", on);
   $("immersiveHint").style.display = on ? "" : "none";
+  $("btnExitImmersive").style.display = on ? "" : "none";
   if (on) {
     try { await document.documentElement.requestFullscreen(); } catch (e) { /* denied or unsupported — capture still works, just not fullscreen */ }
   } else if (document.fullscreenElement) {
@@ -695,68 +666,62 @@ async function setImmersive(on) {
 }
 
 $("btnImmersive").addEventListener("click", () => setImmersive(!immersiveMode));
+$("btnExitImmersive").addEventListener("click", () => setImmersive(false));
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && immersiveMode) setImmersive(false); // browser-driven exit (Esc) — mirror it in our own state
 });
 
-// ---------- keyboard capture: block the browser's own shortcuts for Tab/Enter/F-keys/paging
-// while on the Terminal tab, and route them into the 5250 session instead. Browsers reserve a
-// handful of combos (F11 fullscreen, F12 devtools, Ctrl+W/T/N tab & window management, and in
-// most browsers F5/Ctrl+R refresh) at the OS/chrome level — no web page, this one included, can
-// intercept those; everything else below is captured. ----------
+// ---------- keyboard capture: real terminal fidelity. Every key that a real 5250 keyboard has
+// (character keys, Tab/Backtab, Enter, F1-F24, arrows, Backspace/Delete/Insert, Home, paging) is
+// routed to the daemon's real tn5250j session instead of the browser's own behavior for it, so
+// the on-screen keypad's TAB button and a physical Tab keypress take the identical code path.
+// Browsers reserve a handful of combos at the OS/chrome level that no web page can intercept
+// (F11 fullscreen, F12 devtools, Ctrl+W/T/N tab & window management, and in most browsers
+// F5/Ctrl+R refresh) — those simply never reach this handler; everything else does. ----------
+const CHROME_INPUT_IDS = new Set(["sessionId", "host", "port", "user", "pass", "newFileName"]);
+
 document.addEventListener("keydown", (e) => {
   if (!terminalTabActive() || !$("status").classList.contains("connected")) return;
+  if (document.activeElement && CHROME_INPUT_IDS.has(document.activeElement.id)) return;
 
+  // Arrows: real per-character cursor movement, native tn5250j keys — gated to immersive mode
+  // so casually viewing the Terminal tab never hijacks normal page scrolling.
   if (immersiveMode && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-    const cur = activeField;
-    // Left/Right inside a field with room left to move the caret: let the browser do it natively.
-    if (cur && e.key === "ArrowLeft" && cur.inputEl.selectionStart > 0) return;
-    if (cur && e.key === "ArrowRight" && cur.inputEl.selectionStart < cur.inputEl.value.length) return;
     e.preventDefault();
-    const dir = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
-    const from = cur || editableFields[0];
-    if (!from) return;
-    Promise.resolve(cur ? commitActiveField() : null).then(() => {
-      const target = arrowField(from.row, from.col, dir);
-      if (target) activateField(target.row, target.col, { noSelect: true });
-    });
+    const keyName = { ArrowUp: "UP", ArrowDown: "DOWN", ArrowLeft: "LEFT", ArrowRight: "RIGHT" }[e.key];
+    rpc("key", { key: keyName }).then(resp => renderScreen(resp)).catch(() => {});
     return;
   }
 
   if (e.key === "Tab") {
     e.preventDefault();
-    const cur = activeField;
-    Promise.resolve(cur ? commitActiveField() : null).then(() => {
-      const target = cur ? adjacentEditableField(cur.row, cur.col, e.shiftKey ? -1 : 1) : editableFields[0];
-      if (target) activateField(target.row, target.col);
-    });
-    return;
-  }
-
-  if (e.key === "Escape") {
-    if (activeField) { e.preventDefault(); cancelActiveField(); }
-    return;
-  }
-
-  if (e.key === "Home" && !e.ctrlKey) {
-    e.preventDefault();
-    Promise.resolve(commitActiveField()).then(() => {
-      if (editableFields[0]) activateField(editableFields[0].row, editableFields[0].col);
-    });
+    rpc("key", { key: e.shiftKey ? "BACKTAB" : "TAB" }).then(resp => renderScreen(resp)).catch(() => {});
     return;
   }
 
   let aid = null;
   if (e.key === "Enter") aid = "ENTER";
+  else if (e.key === "Backspace") aid = "BACK_SPACE";
+  else if (e.key === "Delete") aid = "DELETE";
+  else if (e.key === "Insert") aid = "INSERT";
+  else if (e.key === "Home") aid = "HOME";
+  else if (e.key === "PageUp") aid = "PAGE_UP";
+  else if (e.key === "PageDown") aid = "PAGE_DOWN";
   else if (/^F([1-9]|1[0-2])$/.test(e.key)) {
     const n = parseInt(e.key.slice(1), 10);
     aid = "F" + (e.shiftKey ? n + 12 : n); // Shift+F1..F12 -> F13..F24 (no physical F13-F24 on most keyboards)
-  } else if (e.key === "PageUp") aid = "PAGE_UP";
-  else if (e.key === "PageDown") aid = "PAGE_DOWN";
+  }
 
   if (aid) {
     e.preventDefault();
-    Promise.resolve(commitActiveField()).then(() => rpc("key", { key: aid })).then(resp => { if (resp) renderScreen(resp); }).catch(() => {});
+    rpc("key", { key: aid }).then(resp => renderScreen(resp)).catch(() => {});
+    return;
+  }
+
+  // Any other single printable character: send it straight to the real cursor position.
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    rpc("sendtext", { text: e.key }).then(resp => renderScreen(resp)).catch(() => {});
   }
 }, true);
 
@@ -837,7 +802,7 @@ const keypad = $("keypad");
 KEYS.forEach(k => {
   const b = document.createElement("button");
   b.textContent = k; b.className = "small";
-  b.addEventListener("click", async () => { try { await commitActiveField(); renderScreen(await rpc("key", { key: k })); } catch (e) {} });
+  b.addEventListener("click", async () => { try { renderScreen(await rpc("key", { key: k })); } catch (e) {} });
   keypad.appendChild(b);
 });
 

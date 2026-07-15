@@ -128,6 +128,23 @@ public final class SessionService {
                     return resp;
                 }
 
+                // Real-terminal-fidelity GUI typing: characters land wherever the cursor
+                // currently is (tn5250j's own keyboard semantics), not a pre-selected field.
+                // NOTE: not currently hooked into recording (see "type"/"key" above) — a
+                // recording made while using immersive/character typing will not capture
+                // keystrokes sent this way, only whole-field type/key actions. Known gap.
+                case "sendtext": {
+                    Terminal t = getSession(sessionId(req));
+                    t.sendText(str(req, "text", ""));
+                    return ok(t.snapshot());
+                }
+
+                case "setcursor": {
+                    Terminal t = getSession(sessionId(req));
+                    t.setCursor((int) num(req, "row", 1), (int) num(req, "col", 1));
+                    return ok(t.snapshot());
+                }
+
                 case "record-start": {
                     String sid = sessionId(req);
                     String caseName = str(req, "case", "recorded");
