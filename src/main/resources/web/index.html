@@ -107,9 +107,8 @@
   body.immersive #terminalScreenPanel { margin-bottom: 0; }
   body.immersive #screen { font-size: 16px; min-height: 70vh; }
   body.immersive header { padding: 6px 12px; }
-  #terminalScreenPanel { position: relative; }
-  .cursor-overlay { position: absolute; background: rgba(110,224,110,.55); pointer-events: none; animation: cursorBlink 1s step-end infinite; border-radius: 1px; }
-  @keyframes cursorBlink { 50% { opacity: .15; } }
+  .cursor-block { background: rgba(110,224,110,.85); color: #05060a; animation: cursorBlink 1s step-end infinite; }
+  @keyframes cursorBlink { 50% { background: transparent; color: inherit; } }
   #btnExitImmersive { position: fixed; top: 12px; right: 12px; z-index: 2000; background: var(--red); border-color: var(--red); color: white; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
 </style>
 </head>
@@ -161,7 +160,6 @@
     <div class="panel" id="terminalScreenPanel">
       <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ✕ below or ⛶ Immersive again to also turn off keyboard capture.</span></h2>
       <div id="screen">(not connected)</div>
-      <div id="cursorOverlay" class="cursor-overlay" style="display:none"></div>
       <div id="oiaLine"></div>
     </div>
     <button id="btnExitImmersive" style="display:none">✕ Exit Immersive</button>
@@ -516,27 +514,47 @@ function escapeHtml(s) {
 
 // Renders the screen with every detected field wrapped in a span, so the terminal itself
 // behaves like a real 5250 emulator: click a field, type on the keyboard, no side panel.
+// The cursor is rendered INLINE as a span around the actual character at its position, laid out
+// by the same text flow as everything else — not a separately measured/positioned overlay, so
+// it cannot drift out of alignment with the text underneath it.
 function screenGridHtml(screen) {
   if (!screen || !screen.text) return "(no screen captured)";
   const fieldsByRow = {};
   (screen.fields || []).forEach(f => { (fieldsByRow[f.row] = fieldsByRow[f.row] || []).push(f); });
+  const cursor = screen.cursor || {};
   let lines = [];
   for (let r = 0; r < screen.rows; r++) {
     const rowNum = r + 1;
     const rowText = screen.text.slice(r * screen.cols, (r + 1) * screen.cols).replace(/\s+$/, "");
     const rowFields = (fieldsByRow[rowNum] || []).slice().sort((a, b) => a.col - b.col);
+    const cursorCol0 = rowNum === cursor.row ? cursor.col - 1 : -1; // 0-based index into this row's text
+
+    // Renders `text` (occupying columns [base, base+text.length) of this row) around the cursor
+    // column, if it falls inside this run, wrapping just that one character.
+    function emit(text, base, openTag, closeTag) {
+      if (cursorCol0 >= base && cursorCol0 < base + text.length) {
+        const i = cursorCol0 - base;
+        return openTag + escapeHtml(text.slice(0, i)) + `<span class="cursor-block">${escapeHtml(text[i])}</span>` + escapeHtml(text.slice(i + 1)) + closeTag;
+      }
+      return openTag + escapeHtml(text) + closeTag;
+    }
+
     let html = "", pos = 0;
     rowFields.forEach(f => {
       const start = f.col - 1;
       if (start >= rowText.length || start < pos) return;
       const end = Math.min(start + f.length, rowText.length);
-      if (start > pos) html += escapeHtml(rowText.slice(pos, start));
+      if (start > pos) html += emit(rowText.slice(pos, start), pos, "", "");
       const seg = rowText.slice(start, end);
       const cls = f.protected ? "field-protected" : "field-editable";
-      html += `<span class="${cls}" data-row="${f.row}" data-col="${f.col}" data-len="${f.length}" data-protected="${f.protected}">${escapeHtml(seg)}</span>`;
+      html += emit(seg, start, `<span class="${cls}" data-row="${f.row}" data-col="${f.col}" data-len="${f.length}" data-protected="${f.protected}">`, "</span>");
       pos = end;
     });
-    if (pos < rowText.length) html += escapeHtml(rowText.slice(pos));
+    if (pos < rowText.length) html += emit(rowText.slice(pos), pos, "", "");
+    // Cursor may sit past the trimmed trailing-whitespace end of the row (common at end of line).
+    if (cursorCol0 >= rowText.length && cursorCol0 < screen.cols) {
+      html += " ".repeat(cursorCol0 - rowText.length) + '<span class="cursor-block"> </span>';
+    }
     lines.push(String(rowNum).padStart(3, " ") + " | " + html);
   }
   return lines.join("\n");
@@ -578,24 +596,11 @@ function measureCharCell() {
 function screenClickToRowCol(clientX, clientY) {
   if (!charW) measureCharCell();
   const rect = $("screen").getBoundingClientRect();
-  const padding = 12; // matches #screen's CSS padding
+  const padding = 13; // #screen's CSS padding (12px) + its 1px border, since getBoundingClientRect() measures the outer border edge
   const col = Math.round((clientX - rect.left - padding) / charW) - 5;
   const row = Math.floor((clientY - rect.top - padding) / charH) + 1;
   return { row: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.rows : 24, row)),
            col: Math.max(1, Math.min(lastScreenResp ? lastScreenResp.cols : 80, col)) };
-}
-
-function positionCursorOverlay(resp) {
-  if (!charW) measureCharCell();
-  const overlay = $("cursorOverlay");
-  if (!resp || !resp.cursor) { overlay.style.display = "none"; return; }
-  const screenEl = $("screen");
-  const padding = 12; // #screen's own CSS padding; overlay is a sibling, not a child (innerHTML wipes children)
-  overlay.style.display = "";
-  overlay.style.left = (screenEl.offsetLeft + padding + (5 + resp.cursor.col) * charW) + "px";
-  overlay.style.top = (screenEl.offsetTop + padding + (resp.cursor.row - 1) * charH) + "px";
-  overlay.style.width = charW + "px";
-  overlay.style.height = charH + "px";
 }
 
 $("screen").addEventListener("click", (e) => {
@@ -642,7 +647,6 @@ function renderScreen(resp) {
   lastScreenResp = resp;
   $("screen").innerHTML = screenGridHtml(resp);
   renderFieldsTable(resp.fields);
-  positionCursorOverlay(resp);
   updateDocsFromCursorField(resp);
   $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
   $("status").textContent = "connected (" + $("sessionId").value + ")";
@@ -660,8 +664,16 @@ async function setImmersive(on) {
   $("btnExitImmersive").style.display = on ? "" : "none";
   if (on) {
     try { await document.documentElement.requestFullscreen(); } catch (e) { /* denied or unsupported — capture still works, just not fullscreen */ }
-  } else if (document.fullscreenElement) {
-    try { await document.exitFullscreen(); } catch (e) {}
+    // Fullscreen alone reserves Tab (and a few other keys) for the browser itself, as a
+    // safeguard against pages trapping keyboard focus — preventDefault() in our keydown handler
+    // does NOT override that by itself while fullscreen. The Keyboard Lock API is the documented
+    // way to actually get Tab back (built for kiosk/remote-desktop-style apps, exactly this
+    // case). Chromium-only; Escape can never be locked (it's the spec-mandated fullscreen exit),
+    // so that one stays on the browser regardless.
+    try { if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock(["Tab"]); } catch (e) {}
+  } else {
+    if (navigator.keyboard && navigator.keyboard.unlock) { try { navigator.keyboard.unlock(); } catch (e) {} }
+    if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (e) {} }
   }
 }
 
