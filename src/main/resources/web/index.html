@@ -386,12 +386,20 @@ async function rpc(cmd, extra) {
 let isRecording = false;
 let pendingRecordedRows = [];
 
+// A single typed field now arrives as repeated echoes of the SAME row (case+step), growing one
+// character at a time — update that row's cells in place rather than appending a new <tr> per
+// keystroke, or a password would show up as eight separate half-typed "steps" instead of one.
 function addRecordedRowToTable(row) {
   const tbody = document.querySelector("#recordTable tbody");
-  const tr = document.createElement("tr");
+  let tr = tbody.querySelector(`tr[data-case="${row.case}"][data-step="${row.step}"]`);
+  if (!tr) {
+    tr = document.createElement("tr");
+    tr.dataset.case = row.case;
+    tr.dataset.step = row.step;
+    tbody.appendChild(tr);
+  }
   tr.innerHTML = `<td>${row.case}</td><td>${row.step}</td><td>${row.action}</td>
-    <td>${row.target}</td><td>${row.value}</td><td>${row.expected}</td>`;
-  tbody.appendChild(tr);
+    <td>${escapeHtml(row.target)}</td><td>${escapeHtml(row.value)}</td><td>${escapeHtml(row.expected)}</td>`;
   $("recordPanel").style.display = "block";
 }
 
@@ -605,7 +613,7 @@ function screenClickToRowCol(clientX, clientY) {
 
 $("screen").addEventListener("click", (e) => {
   const { row, col } = screenClickToRowCol(e.clientX, e.clientY);
-  rpc("setcursor", { row, col }).then(resp => renderScreen(resp)).catch(() => {});
+  queueTerminalAction(() => rpc("setcursor", { row, col }));
 });
 
 function renderFieldsTable(fields) {
@@ -625,8 +633,7 @@ function renderFieldsTable(fields) {
     </tr>`).join("");
   tbody.querySelectorAll("tr.clickable").forEach(tr => {
     tr.addEventListener("click", () => {
-      rpc("setcursor", { row: parseInt(tr.dataset.row, 10), col: parseInt(tr.dataset.col, 10) })
-        .then(resp => renderScreen(resp)).catch(() => {});
+      queueTerminalAction(() => rpc("setcursor", { row: parseInt(tr.dataset.row, 10), col: parseInt(tr.dataset.col, 10) }));
     });
   });
 }
@@ -692,6 +699,17 @@ document.addEventListener("fullscreenchange", () => {
 // F5/Ctrl+R refresh) — those simply never reach this handler; everything else does. ----------
 const CHROME_INPUT_IDS = new Set(["sessionId", "host", "port", "user", "pass", "newFileName"]);
 
+// Every terminal-mutating action (keystroke, click-to-place-cursor, keypad button) is chained
+// onto this single promise instead of fired independently. Without it, typing faster than one
+// HTTP round-trip (the server uses a cached thread pool, so nothing otherwise guarantees arrival
+// order) could let characters or key presses reach the daemon out of the order they were sent —
+// a real risk, not hypothetical, since nothing here awaited the previous call before firing.
+let terminalQueue = Promise.resolve();
+function queueTerminalAction(makeCall) {
+  terminalQueue = terminalQueue.then(makeCall).then(resp => { if (resp) renderScreen(resp); }).catch(() => {});
+  return terminalQueue;
+}
+
 document.addEventListener("keydown", (e) => {
   if (!terminalTabActive() || !$("status").classList.contains("connected")) return;
   if (document.activeElement && CHROME_INPUT_IDS.has(document.activeElement.id)) return;
@@ -701,13 +719,13 @@ document.addEventListener("keydown", (e) => {
   if (immersiveMode && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
     e.preventDefault();
     const keyName = { ArrowUp: "UP", ArrowDown: "DOWN", ArrowLeft: "LEFT", ArrowRight: "RIGHT" }[e.key];
-    rpc("key", { key: keyName }).then(resp => renderScreen(resp)).catch(() => {});
+    queueTerminalAction(() => rpc("key", { key: keyName }));
     return;
   }
 
   if (e.key === "Tab") {
     e.preventDefault();
-    rpc("key", { key: e.shiftKey ? "BACKTAB" : "TAB" }).then(resp => renderScreen(resp)).catch(() => {});
+    queueTerminalAction(() => rpc("key", { key: e.shiftKey ? "BACKTAB" : "TAB" }));
     return;
   }
 
@@ -726,14 +744,14 @@ document.addEventListener("keydown", (e) => {
 
   if (aid) {
     e.preventDefault();
-    rpc("key", { key: aid }).then(resp => renderScreen(resp)).catch(() => {});
+    queueTerminalAction(() => rpc("key", { key: aid }));
     return;
   }
 
   // Any other single printable character: send it straight to the real cursor position.
   if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
-    rpc("sendtext", { text: e.key }).then(resp => renderScreen(resp)).catch(() => {});
+    queueTerminalAction(() => rpc("sendtext", { text: e.key }));
   }
 }, true);
 
@@ -814,7 +832,7 @@ const keypad = $("keypad");
 KEYS.forEach(k => {
   const b = document.createElement("button");
   b.textContent = k; b.className = "small";
-  b.addEventListener("click", async () => { try { renderScreen(await rpc("key", { key: k })); } catch (e) {} });
+  b.addEventListener("click", () => queueTerminalAction(() => rpc("key", { key: k })));
   keypad.appendChild(b);
 });
 
