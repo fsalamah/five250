@@ -11,6 +11,8 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,6 +30,7 @@ public final class HttpApi {
     private static final File SCENARIOS_DIR = Home.file("scenarios");
     private static final File FAILURES_DIR = Home.file("docs/samples/failures");
     private static final File REPLAYS_DIR = Home.file("docs/samples/replays");
+    private static final DateTimeFormatter RUN_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
     private final SessionService sessionService;
     private final RunTracker runTracker = new RunTracker();
@@ -264,9 +267,19 @@ public final class HttpApi {
                 try {
                     List<ScenarioResult> results = ScenarioRunner.run(flow, t, finalRows,
                         r -> { state.results.add(r.toMap()); state.current = ""; });
+
+                    // Every run gets its own timestamped copy so successive runs never clobber
+                    // each other's history; a fixed-name "latest" copy is kept alongside purely
+                    // for convenience (grep/tail without hunting for the newest timestamp) and
+                    // because /api/scenarios/replay's simple flow/file/index query resolves
+                    // against the untimestamped replay path.
+                    String ts = LocalDateTime.now().format(RUN_TIMESTAMP);
                     ScenarioRunner.writeResults(new File(flowDir(flowName), fileName + ".results.csv"), results);
+                    ScenarioRunner.writeResults(new File(flowDir(flowName), fileName + ".results." + ts + ".csv"), results);
                     ScenarioRunner.writeFailureDumps(new File(new File(FAILURES_DIR, flowName), fileName), results);
+                    ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
                     ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
+                    ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
                     state.status = "done";
                 } catch (Throwable e) {
                     state.status = "error";

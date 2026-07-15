@@ -309,7 +309,13 @@ public final class Cli {
             Map<String, Object> extracted = (Map<String, Object>) r.get("extracted");
             if (extracted != null && !extracted.isEmpty()) {
                 for (Map.Entry<String, Object> e : extracted.entrySet()) {
-                    System.out.println("    " + e.getKey() + " = " + e.getValue());
+                    if (e.getValue() instanceof java.util.List) {
+                        java.util.List<?> rows = (java.util.List<?>) e.getValue();
+                        System.out.println("    " + e.getKey() + " (" + rows.size() + " rows):");
+                        for (Object row : rows) System.out.println("      " + row);
+                    } else {
+                        System.out.println("    " + e.getKey() + " = " + e.getValue());
+                    }
                 }
             }
             if (r.get("error") != null) System.out.println("    ERROR: " + r.get("error"));

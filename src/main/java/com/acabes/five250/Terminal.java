@@ -336,6 +336,19 @@ public final class Terminal {
         return rowText(screen.getRows());
     }
 
+    /** 1-based row text, an explicit 1-based inclusive column range, trimmed — for pulling just
+     * one column of a subfile/list row (job name, status, ...) instead of the whole 80-char line. */
+    public synchronized String rowText(int row, int colStart, int colEnd) {
+        requireConnected();
+        char[] all = screen.getScreenAsChars();
+        int cols = screen.getColumns();
+        int rowStart = (row - 1) * cols;
+        int start = rowStart + Math.max(0, colStart - 1);
+        int end = Math.min(rowStart + Math.min(colEnd, cols), rowStart + cols);
+        if (start >= end) return "";
+        return new String(all, start, end - start).stripTrailing();
+    }
+
     /** 1-based row text, trimmed. */
     public synchronized String rowText(int row) {
         requireConnected();

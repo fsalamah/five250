@@ -22,6 +22,10 @@ import java.util.Set;
  *                       "label:" reads straight off the character buffer (Terminal.readAfterLabel),
  *                       so it works for protected/display-only text (a balance, a job count) —
  *                       not just editable fields, unlike the "type" action's label targeting.
+ *             extract also accepts "rows:<start>-<end>" or "rows:<start>-<end>:<colStart>-<colEnd>"
+ *                       to pull multiple lines off a subfile/list screen (WRKACTJOB's job list,
+ *                       WRKSPLF's spool list, ...) at once — the output value is a list, not a
+ *                       single string; see ScenarioResult.extractRows.
  *             include: name of another CSV file in this same flow's folder (no ".csv"), whose
  *                       steps are spliced in at this point — reuse a suite inside another suite
  *             connect: host to connect to, e.g. pub400.com
@@ -175,7 +179,11 @@ public final class GenericStepFlow implements Flow {
                         if (value.isBlank()) {
                             throw new RuntimeException("extract step needs an output field name in 'value', at step " + i);
                         }
-                        result.extract(value.trim(), doCheck(t, target));
+                        if (target.startsWith("rows:")) {
+                            result.extractRows(value.trim(), doExtractRows(t, target));
+                        } else {
+                            result.extract(value.trim(), doCheck(t, target));
+                        }
                         break;
                     }
                     default:
@@ -264,6 +272,42 @@ public final class GenericStepFlow implements Flow {
             return t.rowText(Integer.parseInt(target.trim()));
         } catch (NumberFormatException e) {
             throw new RuntimeException("check target must be 'message', 'row:<n>', or 'label:<text>', got: " + target);
+        }
+    }
+
+    /**
+     * Multi-row extraction off a subfile/list screen (WRKACTJOB's job list, WRKSPLF's spool
+     * list, ...) — target is "rows:<start>-<end>" for the full width of each row, or
+     * "rows:<start>-<end>:<colStart>-<colEnd>" to pull just one column (job name, status, ...)
+     * out of each row instead of the whole 80-char line.
+     */
+    private List<String> doExtractRows(Terminal t, String target) {
+        String spec = target.substring(5); // after "rows:"
+        String[] parts = spec.split(":");
+        int[] rowRange = parseRange(parts[0], target);
+        if (rowRange[1] < rowRange[0]) {
+            throw new RuntimeException("rows: end must be >= start, got: " + target);
+        }
+
+        int[] colRange = parts.length > 1 ? parseRange(parts[1], target) : null;
+
+        List<String> out = new ArrayList<>();
+        for (int r = rowRange[0]; r <= rowRange[1]; r++) {
+            out.add(colRange != null ? t.rowText(r, colRange[0], colRange[1]) : t.rowText(r));
+        }
+        return out;
+    }
+
+    private static int[] parseRange(String part, String fullTarget) {
+        String[] bounds = part.trim().split("-");
+        if (bounds.length != 2) {
+            throw new RuntimeException("extract 'rows:' target must be 'rows:<start>-<end>' or "
+                + "'rows:<start>-<end>:<colStart>-<colEnd>', got: " + fullTarget);
+        }
+        try {
+            return new int[]{Integer.parseInt(bounds[0].trim()), Integer.parseInt(bounds[1].trim())};
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("non-numeric range in extract target: " + fullTarget);
         }
     }
 

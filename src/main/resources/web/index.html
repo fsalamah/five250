@@ -116,6 +116,10 @@
   .step-row:hover { background: #1e2330; }
   .step-row.current { background: var(--accent); color: #05060a; font-weight: 600; }
   .step-list.not-clickable .step-row { cursor: default; }
+
+  #terminalScreenPanel { position: relative; }
+  #btnSelectArea.active { background: var(--accent); border-color: var(--accent); color: white; }
+  #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(79,157,255,.18); pointer-events: none; z-index: 10; }
 </style>
 </head>
 <body>
@@ -153,6 +157,7 @@
         <span id="recordStatus" class="muted"></span>
         <button class="small" id="btnRecordCheck" style="display:none">+ Check current screen</button>
         <button class="small" id="btnRecordExtract" style="display:none">+ Extract from screen</button>
+        <button class="small" id="btnSelectArea" style="display:none" title="Drag a rectangle on the screen below to extract multiple rows/columns at once (e.g. a subfile job list)">▦ Select Area to Extract</button>
         <button class="primary small" id="btnRecordSave" style="display:none">Save as suite…</button>
         <button class="danger small" id="btnRecordDiscard" style="display:none">Discard</button>
       </div>
@@ -161,6 +166,7 @@
     <div class="panel" id="terminalScreenPanel">
       <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ✕ below or ⛶ Immersive again to also turn off keyboard capture.</span></h2>
       <div id="screen">(not connected)</div>
+      <div id="areaSelectOverlay" style="display:none"></div>
       <div id="oiaLine"></div>
     </div>
     <button id="btnExitImmersive" style="display:none">✕ Exit Immersive</button>
@@ -425,8 +431,10 @@ function setRecordingUI(mode) {
     : mode === "stopped" ? "stopped — Save as suite, or Discard" : "";
   $("btnRecordCheck").style.display = mode === "recording" ? "inline-block" : "none";
   $("btnRecordExtract").style.display = mode === "recording" ? "inline-block" : "none";
+  $("btnSelectArea").style.display = mode === "recording" ? "inline-block" : "none";
   $("btnRecordSave").style.display = mode === "idle" ? "none" : "inline-block";
   $("btnRecordDiscard").style.display = mode === "idle" ? "none" : "inline-block";
+  if (mode !== "recording") setAreaSelectMode(false);
 }
 
 $("btnRecordToggle").addEventListener("click", async () => {
@@ -467,6 +475,92 @@ $("btnRecordExtract").addEventListener("click", async () => {
   const name = prompt("Output field name for this value:", "");
   if (!name) return;
   try { await rpc("record-mark-extract", { target, name }); toast("Extract recorded"); } catch (e) {}
+});
+
+// ---------- select-area-to-extract: a Windows-style rubber-band drag over the screen, for
+// pulling multiple rows (and optionally a column slice) off a subfile/list screen in one go
+// instead of hand-typing a "rows:<start>-<end>" target. Deliberately opt-in and separate from
+// normal screen interaction — the screen itself stays non-clickable otherwise (see the earlier
+// "disallow mouse interactions" change); this is a distinct, explicit tool, only available while
+// recording (there's nowhere to save the resulting extract step otherwise). ----------
+let areaSelectMode = false;
+let areaDragStart = null;
+let areaCharW = 0, areaCharH = 0;
+
+function measureAreaCharCell() {
+  const probe = document.createElement("span");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.whiteSpace = "pre";
+  probe.textContent = "M";
+  const cs = getComputedStyle($("screen"));
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontSize = cs.fontSize;
+  probe.style.lineHeight = cs.lineHeight;
+  document.body.appendChild(probe);
+  areaCharW = probe.getBoundingClientRect().width || 8;
+  areaCharH = probe.getBoundingClientRect().height || 16;
+  probe.remove();
+}
+
+function areaPixelToRowCol(clientX, clientY) {
+  if (!areaCharW) measureAreaCharCell();
+  const rect = $("screen").getBoundingClientRect();
+  const padding = 13; // #screen's 12px CSS padding + 1px border (getBoundingClientRect measures the outer edge)
+  const col = Math.round((clientX - rect.left - padding) / areaCharW) - 5;
+  const row = Math.floor((clientY - rect.top - padding) / areaCharH) + 1;
+  const maxRows = lastScreenResp ? lastScreenResp.rows : 24, maxCols = lastScreenResp ? lastScreenResp.cols : 80;
+  return { row: Math.max(1, Math.min(maxRows, row)), col: Math.max(1, Math.min(maxCols, col)) };
+}
+
+function setAreaSelectMode(on) {
+  areaSelectMode = on;
+  $("btnSelectArea").classList.toggle("active", on);
+  $("screen").style.cursor = on ? "crosshair" : "";
+  if (!on) { $("areaSelectOverlay").style.display = "none"; areaDragStart = null; }
+}
+
+$("btnSelectArea").addEventListener("click", () => setAreaSelectMode(!areaSelectMode));
+
+function updateAreaOverlay(x1, y1, x2, y2) {
+  const overlay = $("areaSelectOverlay");
+  const panelRect = $("terminalScreenPanel").getBoundingClientRect();
+  overlay.style.display = "block";
+  overlay.style.left = (Math.min(x1, x2) - panelRect.left) + "px";
+  overlay.style.top = (Math.min(y1, y2) - panelRect.top) + "px";
+  overlay.style.width = Math.abs(x2 - x1) + "px";
+  overlay.style.height = Math.abs(y2 - y1) + "px";
+}
+
+$("screen").addEventListener("mousedown", (e) => {
+  if (!areaSelectMode) return;
+  e.preventDefault();
+  areaDragStart = { x: e.clientX, y: e.clientY };
+  updateAreaOverlay(e.clientX, e.clientY, e.clientX, e.clientY);
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!areaSelectMode || !areaDragStart) return;
+  updateAreaOverlay(areaDragStart.x, areaDragStart.y, e.clientX, e.clientY);
+});
+
+document.addEventListener("mouseup", async (e) => {
+  if (!areaSelectMode || !areaDragStart) return;
+  const start = areaPixelToRowCol(areaDragStart.x, areaDragStart.y);
+  const end = areaPixelToRowCol(e.clientX, e.clientY);
+  areaDragStart = null;
+  $("areaSelectOverlay").style.display = "none";
+
+  const rowStart = Math.min(start.row, end.row), rowEnd = Math.max(start.row, end.row);
+  const colStart = Math.min(start.col, end.col), colEnd = Math.max(start.col, end.col);
+  if (rowStart === rowEnd && colStart === colEnd) return; // a click, not a drag — ignore
+
+  const name = prompt(`Output field name for rows ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}:`, "extracted_data");
+  if (!name) return;
+  const target = colEnd - colStart >= 78 // near-full-width drag: skip the column slice, keep the whole line
+    ? `rows:${rowStart}-${rowEnd}`
+    : `rows:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
+  try { await rpc("record-mark-extract", { target, name }); toast(`Extract recorded: ${target}`); } catch (err) {}
 });
 
 $("btnRecordSave").addEventListener("click", async () => {
@@ -1156,7 +1250,8 @@ function renderResults(results) {
     const checksText = (r.checks || []).map(c =>
       `${c.name}: expected "${c.expected}" got "${c.actual}" ${c.passed ? "✓" : "✗"}`
     ).join(" | ") + (r.error ? " ERROR: " + r.error : "");
-    const extractedText = Object.entries(r.extracted || {}).map(([k, v]) => `${k}=${v}`).join(", ");
+    const extractedText = Object.entries(r.extracted || {})
+      .map(([k, v]) => Array.isArray(v) ? `${k}=[${v.length} rows: ${v.join(" | ")}]` : `${k}=${v}`).join(", ");
     tr.innerHTML = `<td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? "PASS" : "FAIL"}</td>
       <td>${rowText}</td><td>${checksText}</td><td>${extractedText}</td><td></td>`;
     if (r.steps && r.steps.length) {

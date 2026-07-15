@@ -2,5 +2,5 @@ target/
 *.class
 .idea/
 *.iml
-scenarios/**/*.results.csv
+scenarios/**/*.results*.csv
 docs/samples/

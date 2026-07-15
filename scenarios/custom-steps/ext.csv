@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+recorded,1,type,label:Your user name:,${USER},
+recorded,2,key,,TAB,
+recorded,3,type,label:Password (max. 128):,${PASSWORD},
+recorded,4,key,,ENTER,
+recorded,5,type,"20,7",5,
+recorded,6,key,,ENTER,
+recorded,7,extract,row:23,f16,
