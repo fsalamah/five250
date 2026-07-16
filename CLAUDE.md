@@ -119,7 +119,10 @@ target/five250.jar connect ...` call brings both up). Two tabs:
 1. **Pure CSV, no code (`custom-steps` flow)** — this is the one to reach for
    first. Each scenario is a group of rows sharing a `case` id, executed in
    `step` order:
-   `case, step, action(type|key|check|extract|include|connect|wait), target, value, expected`.
+   `case, step, action(type|key|check|extract|include|connect|wait|disconnect), target, value, expected`.
+   `disconnect` closes the session outright - recorded automatically when the
+   live session actually disconnects, so replay reaches the same end state
+   the recording did (no lingering connection the live run never had).
    `type` target is `label:<text>` (preferred) or `<row>,<col>`; `check`/
    `extract` target is `message`, `row:<n>`, or `label:<text>`; `include`
    target is another CSV file name (no `.csv`) in the same flow folder — its

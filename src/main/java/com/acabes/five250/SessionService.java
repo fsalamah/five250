@@ -205,7 +205,12 @@ public final class SessionService {
                     String sid = sessionId(req);
                     Terminal t = sessions.remove(sid);
                     if (t != null) t.disconnect();
-                    return ok(Map.of());
+                    Map<String, Object> resp = ok(Map.of());
+                    RecordingState rec = recordings.get(sid);
+                    if (rec != null) {
+                        resp.put("recordedRow", rec.add("disconnect", "", "", ""));
+                    }
+                    return resp;
                 }
 
                 default:

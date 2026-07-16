@@ -16,7 +16,7 @@ import java.util.Set;
  *
  *   case      groups rows into one scenario
  *   step      execution order within a case (numeric)
- *   action    type | key | check | extract | include | connect | wait
+ *   action    type | key | check | extract | include | connect | wait | disconnect
  *   target    type: "label:<text>" or "<row>,<col>"
  *             check/extract: "label:<text>", "row:<n>", or "message" (row 24).
  *                       "label:" reads straight off the character buffer (Terminal.readAfterLabel),
@@ -29,17 +29,23 @@ import java.util.Set;
  *             include: name of another CSV file in this same flow's folder (no ".csv"), whose
  *                       steps are spliced in at this point — reuse a suite inside another suite
  *             connect: host to connect to, e.g. pub400.com
- *             key/wait: unused
+ *             key/wait/disconnect: unused
  *   value     type: text to enter. key: AID key name (ENTER, F3, PAGEDOWN, ...).
  *             connect: port (default 23). wait: seconds to sleep (0-120).
  *             extract: output field name to store the read value under (structured output, not
  *                       a pass/fail check — appears in the results CSV/JSON as its own column).
- *             check/include: unused
+ *             check/include/disconnect: unused
  *   expected  check: substring the target's actual text must contain to pass.
- *             connect: "true" for SSL, otherwise plain telnet. wait/include/extract: unused
+ *             connect: "true" for SSL, otherwise plain telnet. wait/include/extract/disconnect: unused
  *
  * "wait" is a deliberate, capped exception to the "never sleep" rule — use it only for delays
  * outside the 5250 buffer (a batch job finishing) that waitReady()'s polling can't see.
+ *
+ * "disconnect" closes the socket outright (Terminal.disconnect()) - recorded automatically
+ * whenever the live session it was captured from actually disconnected (Disconnect button, or a
+ * recorded suite's own signoff), so replay reaches the same end state as the recording, not a
+ * lingering connection the recording never had. A later step reconnecting mid-suite is not
+ * supported - HttpApi.autoConnectIfNeeded() only auto-connects once, before the run starts.
  *
  * "connect" is NOT executed by this class — HttpApi.autoConnectIfNeeded() intercepts it before
  * the run even starts, so a whole suite can go from a cold, disconnected session to a finished
@@ -175,6 +181,9 @@ public final class GenericStepFlow implements Flow {
                     case "wait":
                         doWait(value);
                         break;
+                    case "disconnect":
+                        t.disconnect();
+                        break;
                     case "extract": {
                         if (value.isBlank()) {
                             throw new RuntimeException("extract step needs an output field name in 'value', at step " + i);
@@ -188,7 +197,7 @@ public final class GenericStepFlow implements Flow {
                     }
                     default:
                         throw new RuntimeException("Unknown action '" + action + "' at step " + i
-                            + " (expected type, key, check, extract, include, or wait)");
+                            + " (expected type, key, check, extract, include, connect, wait, or disconnect)");
                 }
 
                 try {
