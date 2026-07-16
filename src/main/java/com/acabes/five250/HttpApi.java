@@ -321,15 +321,13 @@ public final class HttpApi {
         }
         if (connectRow == null) return rows;
 
-        boolean alreadyConnected;
-        try {
-            sessionService.getSession(sessionId);
-            alreadyConnected = true;
-        } catch (RuntimeException e) {
-            alreadyConnected = false;
-        }
-
+        // A prior run's own "disconnect" step (GenericStepFlow) closes the Terminal's socket but
+        // has no way to deregister it here — leaving a stale, dead entry that map-membership
+        // alone would mistake for "already connected", skipping reconnection and dooming every
+        // run after the one that disconnected. Clear it out so a fresh connect can replace it.
+        boolean alreadyConnected = sessionService.isActuallyConnected(sessionId);
         if (!alreadyConnected) {
+            sessionService.forget(sessionId);
             String host = connectRow.getOrDefault("target", "").trim();
             if (host.isEmpty()) throw new RuntimeException("connect step has no target host");
             long port = 23;

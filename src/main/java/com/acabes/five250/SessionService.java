@@ -23,6 +23,21 @@ public final class SessionService {
         return t;
     }
 
+    /** True only if a session both exists AND its socket is still actually connected — a
+     * GenericStepFlow "disconnect" step (or a dropped connection) closes the Terminal's socket
+     * without deregistering it here, so a plain map-membership check alone can't tell a live
+     * session from a stale, already-dead one still sitting in the registry. */
+    public boolean isActuallyConnected(String sessionId) {
+        Terminal t = sessions.get(sessionId);
+        return t != null && t.isConnected();
+    }
+
+    /** Drops a session from the registry without touching its socket — for clearing out a stale
+     * entry left behind by a "disconnect" step, ahead of a fresh connect replacing it. */
+    public void forget(String sessionId) {
+        sessions.remove(sessionId);
+    }
+
     public Map<String, String> sessionStatuses() {
         Map<String, String> out = new LinkedHashMap<>();
         for (Map.Entry<String, Terminal> e : sessions.entrySet()) {
