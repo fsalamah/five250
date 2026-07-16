@@ -105,7 +105,8 @@ public final class HttpApi {
                 File dir = flowDir(flowName);
                 dir.mkdirs();
                 List<Object> files = new ArrayList<>();
-                File[] found = dir.listFiles((d, n) -> n.endsWith(".csv") && !n.endsWith(".results.csv") && !n.endsWith(".vars.csv"));
+                File[] found = dir.listFiles((d, n) -> n.endsWith(".csv") && !n.endsWith(".results.csv")
+                    && !n.endsWith(".vars.csv") && !n.endsWith(".data.csv"));
                 if (found != null) {
                     java.util.Arrays.sort(found, java.util.Comparator.comparing(File::getName));
                     for (File f : found) {
@@ -217,6 +218,12 @@ public final class HttpApi {
                 case "PUT": {
                     List<Map<String, String>> rows = toStringRows(Json.parse(readBody(ex)));
                     Variables.write(file, rows);
+                    Map<String, String> vars = new LinkedHashMap<>();
+                    for (Map<String, String> row : rows) {
+                        String name = row.get("name");
+                        if (name != null && !name.isBlank()) vars.put(name.trim(), row.getOrDefault("value", ""));
+                    }
+                    DataDrivenRunner.onVarsSaved(flowDir(flowName), flowName, fileName, vars);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                     return;
                 }

@@ -173,6 +173,19 @@ which redeclares `USER`/`PASSWORD` on top of its own `COMMAND`/
 `EXPECTED_TITLE`). If this bites people, the fix is to merge included files'
 `.vars.csv` too — not done yet, deliberately kept simple for v1.
 
+**Data-driven re-run**: every time a scenario's `.vars.csv` is saved (GUI
+Variables panel, or `PUT /api/scenario-vars`), `DataDrivenRunner` appends that
+value set as one more row of `scenarios/<flow>/<file>.data.csv` (columns =
+union of every variable name ever saved for that file — new columns backfill
+blank on older rows) and (re)writes `scenarios/<flow>/<file>.bat` +
+`<file>.run.ps1` next to it. Double-click the `.bat` (or run it from CI) to
+replay the whole suite once per row of `.data.csv`, each time with that row's
+`${NAME}` values passed as `--var` overrides to `run-suite` — a lightweight
+data-driven test matrix built purely from "values I've actually saved and
+tried," no separate authoring step. The `.bat`/`.run.ps1` pair is regenerated
+(overwritten) on every vars save; edit `.data.csv` by hand (or re-save vars)
+rather than the generated scripts.
+
 Scenario files live in `scenarios/<flow-name>/<file-name>.csv` (folder per
 flow, multiple named files each — a real project explorer, not one fixed
 file). Results are written to `scenarios/<flow-name>/<file-name>.results.csv`
