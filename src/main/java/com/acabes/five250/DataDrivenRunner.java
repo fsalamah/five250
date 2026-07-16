@@ -12,12 +12,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Whenever a scenario's ${NAME} variables are saved, records that value set as one more row
- * of a "<file>.data.csv" (columns = every variable name ever saved, one row per save = one
- * data-driven run) and (re)writes a "<file>.bat" (Windows) + "<file>.sh" (everything else) pair
- * next to the scenario. Both are trivial wrappers around `run-suite --data-csv`, which does the
- * actual per-row looping in Java (see Cli.runSuite) - reusing the same CSV parser (Csv.java) the
- * rest of five250 uses, instead of re-parsing CSV in batch/PowerShell/shell.
+ * Manages a scenario's "<file>.data.csv" (columns = variable names, one row per data-driven run)
+ * and (re)writes a "<file>.bat" (Windows) + "<file>.sh" (everything else) pair next to the
+ * scenario. Both are trivial wrappers around `run-suite --data-csv`, which does the actual
+ * per-row looping in Java (see Cli.runSuite) - reusing the same CSV parser (Csv.java) the rest of
+ * five250 uses, instead of re-parsing CSV in batch/PowerShell/shell.
+ *
+ * Two ways rows get into the grid: saveGrid() replaces it wholesale (the GUI's Variables panel
+ * edits this grid directly - add/remove rows and columns, same shape as the file on disk), or
+ * onVarsSaved()/appendRow() (kept for the older /api/scenario-vars name/value PUT) grows it by
+ * exactly one row per save.
  */
 public final class DataDrivenRunner {
 
@@ -40,6 +44,31 @@ public final class DataDrivenRunner {
         if (!vars.isEmpty()) {
             appendRow(dataFile(flowDir, fileName), vars);
         }
+        writeRunner(flowDir, flowName, fileName);
+    }
+
+    /**
+     * Replaces the whole data-driven grid wholesale with what the engineer edited directly (the
+     * GUI's Variables panel IS this grid now, not a separate name/value list) - unlike
+     * onVarsSaved()/appendRow(), which only ever grow the file by one row. The LAST row becomes
+     * the "current" single active variable set (written to <file>.vars.csv, in the name/value
+     * shape Variables.load()/GenericStepFlow substitution already expect), so a plain Run All
+     * keeps using "whatever I saved most recently" without the two files ever disagreeing.
+     */
+    public static void saveGrid(File flowDir, File varsFile, String flowName, String fileName,
+                                 List<String> columns, List<Map<String, String>> rows) throws IOException {
+        Csv.write(dataFile(flowDir, fileName), columns, rows);
+
+        List<Map<String, String>> varsRows = new ArrayList<>();
+        Map<String, String> current = rows.isEmpty() ? Map.of() : rows.get(rows.size() - 1);
+        for (String col : columns) {
+            Map<String, String> varRow = new LinkedHashMap<>();
+            varRow.put("name", col);
+            varRow.put("value", current.getOrDefault(col, ""));
+            varsRows.add(varRow);
+        }
+        Variables.write(varsFile, varsRows);
+
         writeRunner(flowDir, flowName, fileName);
     }
 

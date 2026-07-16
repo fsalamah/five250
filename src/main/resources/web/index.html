@@ -279,13 +279,14 @@
 
         <div class="panel">
           <div class="row" style="justify-content:space-between; margin-bottom:0">
-            <h2 style="margin:0">Variables <span class="muted" style="text-transform:none;font-weight:normal">— use ${NAME} in any cell above</span></h2>
+            <h2 style="margin:0">Variables <span class="muted" style="text-transform:none;font-weight:normal">— use ${NAME} in any cell above. Each row is one saved value set (same shape as &lt;file&gt;.data.csv, driving the generated .bat/.sh); the last row is what a plain Run All uses.</span></h2>
             <div class="row" style="margin:0">
-              <button class="small" id="btnAddVar">+ Variable</button>
+              <button class="small" id="btnAddVarCol">+ Variable</button>
+              <button class="small" id="btnAddVarRow">+ Row</button>
               <button class="small" id="btnSaveVars">Save</button>
             </div>
           </div>
-          <table id="varsTable"><thead><tr><th>Name</th><th>Value</th><th></th></tr></thead><tbody></tbody></table>
+          <table id="varsTable"><thead></thead><tbody></tbody></table>
         </div>
 
         <div class="panel" id="runningPanel" style="display:none">
@@ -1177,47 +1178,91 @@ async function selectFile(name) {
   await loadVars();
 }
 
-// ---------- variables (${NAME} substitution) ----------
+// ---------- variables: the data-driven grid (${NAME} substitution) ----------
+// The Variables panel edits <file>.data.csv directly - columns are variable names, rows are
+// saved value sets (the same shape DataDrivenRunner's generated .bat/.sh loop over), instead of
+// a plain name/value list. The LAST row is what a non-data-driven Run All actually substitutes
+// (server derives <file>.vars.csv from it on save - see DataDrivenRunner.saveGrid).
+let currentVarColumns = [];
 
 async function loadVars() {
-  const res = await fetch(`/api/scenario-vars?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`);
+  const res = await fetch(`/api/scenario-data?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`);
   const json = await res.json();
-  const tbody = document.querySelector("#varsTable tbody");
-  tbody.innerHTML = "";
-  if (json.ok) json.rows.forEach(addVarRow);
+  currentVarColumns = json.ok ? (json.columns || []) : [];
+  renderVarsGrid(json.ok ? (json.rows || []) : []);
 }
 
-function addVarRow(row) {
+function renderVarsGrid(rows) {
+  const thead = document.querySelector("#varsTable thead");
+  const tbody = document.querySelector("#varsTable tbody");
+  thead.innerHTML = "<tr>" + currentVarColumns.map(c =>
+    `<th>${escapeHtml(c)} <button class="small danger" data-col="${escapeHtml(c)}" title="Remove variable ${escapeHtml(c)}" style="padding:1px 6px">✕</button></th>`
+  ).join("") + "<th></th></tr>";
+  thead.querySelectorAll("button[data-col]").forEach(btn => {
+    btn.addEventListener("click", () => removeVarColumn(btn.dataset.col));
+  });
+  tbody.innerHTML = "";
+  rows.forEach(row => addVarRowToTable(row));
+}
+
+function addVarRowToTable(row) {
   const tbody = document.querySelector("#varsTable tbody");
   const tr = document.createElement("tr");
-  const nameInput = document.createElement("input"); nameInput.value = row.name || ""; nameInput.placeholder = "NAME"; nameInput.autocomplete = "off";
-  const valueInput = document.createElement("input"); valueInput.value = row.value || ""; valueInput.placeholder = "value"; valueInput.autocomplete = "off";
-  const tdName = document.createElement("td"); tdName.appendChild(nameInput);
-  const tdValue = document.createElement("td"); tdValue.appendChild(valueInput);
+  currentVarColumns.forEach(c => {
+    const td = document.createElement("td");
+    const input = document.createElement("input");
+    input.value = (row && row[c]) || ""; input.dataset.col = c; input.autocomplete = "off";
+    td.appendChild(input); tr.appendChild(td);
+  });
   const tdDel = document.createElement("td");
   const del = document.createElement("button"); del.textContent = "✕"; del.className = "small danger";
   del.addEventListener("click", () => tr.remove());
-  tdDel.appendChild(del);
-  tr.append(tdName, tdValue, tdDel);
+  tdDel.appendChild(del); tr.appendChild(tdDel);
   tbody.appendChild(tr);
 }
 
-$("btnAddVar").addEventListener("click", () => {
+function readVarsGrid() {
+  const rows = [];
+  document.querySelectorAll("#varsTable tbody tr").forEach(tr => {
+    const row = {};
+    tr.querySelectorAll("input").forEach(inp => row[inp.dataset.col] = inp.value);
+    rows.push(row);
+  });
+  return rows;
+}
+
+/** Removes a variable (column) from the grid - existing rows' values for it are dropped. */
+function removeVarColumn(name) {
+  const rows = readVarsGrid();
+  currentVarColumns = currentVarColumns.filter(c => c !== name);
+  rows.forEach(r => delete r[name]);
+  renderVarsGrid(rows);
+}
+
+$("btnAddVarCol").addEventListener("click", () => {
   if (!currentFile) { toast("Select or create a file first"); return; }
-  addVarRow({});
+  const name = prompt("New variable name (used as ${NAME} in step cells):", "");
+  if (!name) return;
+  const trimmed = name.trim();
+  if (currentVarColumns.includes(trimmed)) { toast(`Variable "${trimmed}" already exists`); return; }
+  const rows = readVarsGrid();
+  currentVarColumns.push(trimmed);
+  renderVarsGrid(rows);
+});
+
+$("btnAddVarRow").addEventListener("click", () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+  if (!currentVarColumns.length) { toast('Add a variable ("+ Variable") first'); return; }
+  addVarRowToTable({});
 });
 
 $("btnSaveVars").addEventListener("click", async () => {
   if (!currentFile) { toast("Select or create a file first"); return; }
-  const rows = [];
-  document.querySelectorAll("#varsTable tbody tr").forEach(tr => {
-    const inputs = tr.querySelectorAll("input");
-    if (inputs[0].value.trim()) rows.push({ name: inputs[0].value.trim(), value: inputs[1].value });
-  });
-  const res = await fetch(`/api/scenario-vars?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
-    { method: "PUT", body: JSON.stringify(rows) });
+  const rows = readVarsGrid();
+  const res = await fetch(`/api/scenario-data?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
+    { method: "PUT", body: JSON.stringify({ columns: currentVarColumns, rows }) });
   const json = await res.json();
-  if (json.ok) toast("Saved " + json.count + " variables"); else toast("Error: " + json.error);
+  if (json.ok) toast("Saved " + json.count + " row(s)"); else toast("Error: " + json.error);
 });
 
 $("btnNewFile").addEventListener("click", async () => {
@@ -1265,8 +1310,10 @@ $("btnDeleteFile").addEventListener("click", () => {
 
 function clearTable() {
   currentColumns = [];
+  currentVarColumns = [];
   document.querySelector("#scenarioTable thead").innerHTML = "";
   document.querySelector("#scenarioTable tbody").innerHTML = "";
+  document.querySelector("#varsTable thead").innerHTML = "";
   document.querySelector("#varsTable tbody").innerHTML = "";
 }
 

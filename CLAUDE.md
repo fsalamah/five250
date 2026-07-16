@@ -177,30 +177,40 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    `Flow.csvColumns()` and are entirely data from then on.
 
 **Variables**: any cell in any flow's CSV may contain `${NAME}` — resolved
-from `scenarios/<flow>/<file>.vars.csv` (name/value pairs, editable in the
-GUI's Variables panel) before the row/case runs. Substitution happens after
-`include` expansion, so a suite that includes another must also define any
-variables the included suite's placeholders need — variables are **not**
-inherited automatically from included files (see `full-signon-v2.vars.csv`,
-which redeclares `USER`/`PASSWORD` on top of its own `COMMAND`/
-`EXPECTED_TITLE`). If this bites people, the fix is to merge included files'
-`.vars.csv` too — not done yet, deliberately kept simple for v1.
+from `scenarios/<flow>/<file>.vars.csv` (name/value pairs) before the
+row/case runs. Substitution happens after `include` expansion, so a suite
+that includes another must also define any variables the included suite's
+placeholders need — variables are **not** inherited automatically from
+included files (see `full-signon-v2.vars.csv`, which redeclares
+`USER`/`PASSWORD` on top of its own `COMMAND`/`EXPECTED_TITLE`). If this
+bites people, the fix is to merge included files' `.vars.csv` too — not done
+yet, deliberately kept simple for v1.
 
-**Data-driven re-run**: every time a scenario's `.vars.csv` is saved (GUI
-Variables panel, or `PUT /api/scenario-vars`), `DataDrivenRunner` appends that
-value set as one more row of `scenarios/<flow>/<file>.data.csv` (columns =
-union of every variable name ever saved for that file — new columns backfill
-blank on older rows) and (re)writes `scenarios/<flow>/<file>.bat` (Windows) +
-`<file>.sh` (Linux/macOS) next to it. Run either one (or from CI) to replay
-the whole suite once per row of `.data.csv`, each time with that row's
-`${NAME}` values overriding the saved `.vars.csv` for that run only — a
-lightweight data-driven test matrix built purely from "values I've actually
-saved and tried," no separate authoring step. Both scripts are thin wrappers
-around `run-suite --data-csv <path>` (see `Cli.runSuite`/`HelpText`'s
-`run-suite` entry) - the actual per-row loop and CSV parsing live in Java
-(reusing `Csv.java`), not duplicated in batch/shell. The `.bat`/`.sh` pair is
-regenerated (overwritten) on every vars save; edit `.data.csv` by hand (or
-re-save vars) rather than the generated scripts.
+**The GUI's Variables panel edits `<file>.data.csv` directly** (`/api/
+scenario-data` GET/PUT), not a plain name/value list: columns are variable
+names, rows are saved value sets — "+ Variable" adds a column, "+ Row" adds
+a value set, an "✕" on a column header removes that variable everywhere.
+Saving (`DataDrivenRunner.saveGrid`) writes the whole grid to `.data.csv`
+wholesale (not an append), derives the single "current" `.vars.csv` from the
+**last** row (so a plain, non-data-driven Run All always substitutes
+"whatever I saved most recently"), and regenerates the `.bat`/`.sh` pair.
+`/api/scenario-vars` (plain name/value PUT, via `DataDrivenRunner.
+onVarsSaved`/`appendRow`) still exists for API/back-compat — it only ever
+appends one row — but the GUI itself no longer uses it.
+
+**Data-driven re-run**: `scenarios/<flow>/<file>.data.csv` (columns = every
+variable name ever saved, one row per data-driven run) has a `<file>.bat`
+(Windows) + `<file>.sh` (Linux/macOS) pair next to it, regenerated on every
+Variables-panel save. Run either one (or from CI) to replay the whole suite
+once per row of `.data.csv`, each time with that row's `${NAME}` values
+overriding the saved `.vars.csv` for that run only — a lightweight
+data-driven test matrix built purely from "values I've actually saved and
+tried," no separate authoring step. Both scripts are thin wrappers around
+`run-suite --data-csv <path>` (see `Cli.runSuite`/`HelpText`'s `run-suite`
+entry) - the actual per-row loop and CSV parsing live in Java (reusing
+`Csv.java`), not duplicated in batch/shell. Edit `.data.csv` by hand (or
+through the Variables panel) rather than the generated scripts, which are
+overwritten on every save.
 
 Scenario files live in `scenarios/<flow-name>/<file-name>.csv` (folder per
 flow, multiple named files each — a real project explorer, not one fixed

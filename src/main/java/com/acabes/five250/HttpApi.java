@@ -52,6 +52,7 @@ public final class HttpApi {
         server.createContext("/api/scenarios/run", this::handleScenariosRun);
         server.createContext("/api/scenarios/replay", this::handleScenarioReplay);
         server.createContext("/api/scenario-vars", this::handleScenarioVars);
+        server.createContext("/api/scenario-data", this::handleScenarioData);
         server.createContext("/api/scenarios", this::handleScenarios);
         server.createContext("/", this::handleStatic);
 
@@ -226,6 +227,47 @@ public final class HttpApi {
                         if (name != null && !name.isBlank()) vars.put(name.trim(), row.getOrDefault("value", ""));
                     }
                     DataDrivenRunner.onVarsSaved(flowDir(flowName), flowName, fileName, vars);
+                    sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
+                    return;
+                }
+                default:
+                    sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    /**
+     * /api/scenario-data : the data-driven grid backing "<file>.data.csv" directly - columns are
+     * variable names, rows are value sets - so the GUI's Variables panel can edit that file's
+     * actual shape (add a row = a new value set, add a column = a new variable) instead of a
+     * separate name/value list. PUT also derives the single "current" vars.csv from the last row
+     * (see DataDrivenRunner.saveGrid) and regenerates the <file>.bat/.sh pair.
+     */
+    private void handleScenarioData(HttpExchange ex) throws IOException {
+        try {
+            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+            String flowName = requireParam(query, "flow");
+            String fileName = safeName(requireParam(query, "file"));
+            File file = DataDrivenRunner.dataFile(flowDir(flowName), fileName);
+
+            switch (ex.getRequestMethod()) {
+                case "GET": {
+                    List<String> columns = Csv.readHeader(file);
+                    List<Map<String, String>> rows = Csv.read(file);
+                    sendJson(ex, 200, Map.of("ok", true, "columns", columns, "rows", rows));
+                    return;
+                }
+                case "PUT": {
+                    Map<String, Object> body = Json.parseObject(readBody(ex));
+                    List<String> columns = new ArrayList<>();
+                    Object columnsRaw = body.get("columns");
+                    if (columnsRaw instanceof List) {
+                        for (Object c : (List<?>) columnsRaw) columns.add(String.valueOf(c));
+                    }
+                    List<Map<String, String>> rows = toStringRows(body.get("rows"));
+                    DataDrivenRunner.saveGrid(flowDir(flowName), varsFile(flowName, fileName), flowName, fileName, columns, rows);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                     return;
                 }

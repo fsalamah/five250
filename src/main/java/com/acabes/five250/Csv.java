@@ -36,6 +36,15 @@ public final class Csv {
         return rows;
     }
 
+    /** Just the header row (column names), without reading/allocating every data row — for a
+     * caller that needs to know the columns even when the file has zero data rows. */
+    public static List<String> readHeader(File file) throws IOException {
+        if (!file.exists()) return List.of();
+        String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        List<List<String>> records = parseRecords(content);
+        return records.isEmpty() ? List.of() : records.get(0);
+    }
+
     public static void write(File file, List<Map<String, String>> rows) throws IOException {
         List<String> header = rows.isEmpty() ? List.of() : new ArrayList<>(rows.get(0).keySet());
         write(file, header, rows);
