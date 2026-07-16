@@ -145,23 +145,29 @@ public final class HelpText {
 
         ENTRIES.put("run-suite", new Entry(
             "Run a scenario CSV from the command line (e.g. from CI)",
-            "five250 run-suite --flow <flow> --file <file> [--session <id>] [--var NAME=VALUE ...] [--timeout <sec>]",
+            "five250 run-suite --flow <flow> --file <file> [--session <id>] [--var NAME=VALUE ...] "
+                + "[--data-csv <path>] [--timeout <sec>]",
             "Starts the run in the background daemon exactly like clicking Run All in the GUI, "
                 + "then polls and prints each step as it executes, followed by PASS/FAIL and a "
                 + "summary. Exits 0 if every scenario passed, 1 if any failed, 2 on a run error, "
                 + "3 on timeout — safe to use as a CI gate. --var overrides that scenario file's "
                 + "saved ${NAME} values for this run only, without touching the .vars.csv file; "
-                + "repeat --var for multiple values.",
+                + "repeat --var for multiple values. --data-csv runs the whole suite once per row "
+                + "of a CSV whose header names are ${NAME} variables (each row's values override "
+                + "--var/the saved .vars.csv for that run only) — this is what the auto-generated "
+                + "<file>.bat/<file>.sh next to a scenario invoke after every vars save.",
             List.of(
                 "--flow      Flow name, e.g. custom-steps",
                 "--file      Scenario file name (no .csv), e.g. self-contained-signon",
                 "--session   Session id to run against. Default 'default'",
                 "--var       NAME=VALUE, repeatable. Overrides that name's saved variable value",
+                "--data-csv  Path to a CSV of variable sets; runs once per row, aggregates PASS/FAIL",
                 "--timeout   Seconds to wait for the run to finish before giving up. Default 300"
             ),
             List.of(
                 "five250 run-suite --flow custom-steps --file self-contained-signon",
-                "five250 run-suite --flow run-command --file variable-demo --var CMD1=WRKSPLF --var TITLE1=\"Work with All Spooled Files\""
+                "five250 run-suite --flow run-command --file variable-demo --var CMD1=WRKSPLF --var TITLE1=\"Work with All Spooled Files\"",
+                "five250 run-suite --flow custom-steps --file recorded --data-csv scenarios/custom-steps/recorded.data.csv"
             )
         ));
 

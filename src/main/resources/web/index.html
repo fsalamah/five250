@@ -5,69 +5,116 @@
 <title>five250</title>
 <style>
   :root {
-    --bg: #0f1115; --panel: #171a21; --border: #2a2f3a; --text: #d8dee9;
-    --muted: #7a8296; --accent: #4f9dff; --green: #34c759; --red: #ff5c5c;
+    --bg: #0d0f13; --panel: #161923; --panel-alt: #1b1f2b; --border: #282e3d; --border-soft: #20242f; --text: #e4e8f1;
+    --muted: #838da3; --accent: #5b9dff; --accent-dim: #3d6bb0; --green: #3ecf7e; --red: #ff6767;
     --mono: "Cascadia Code","Consolas","IBM Plex Mono",monospace;
+    --sans: -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.3);
+    --shadow-2: 0 8px 24px rgba(0,0,0,.35);
+    --radius: 9px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
-  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-  header .tabs { display: flex; gap: 4px; margin-left: 24px; }
-  header button.tab { background: none; border: none; color: var(--muted); padding: 8px 14px; cursor: pointer; border-radius: 6px; font-size: 14px; }
-  header button.tab.active { background: var(--accent); color: white; }
-  header .status { margin-left: auto; font-size: 12px; color: var(--muted); }
-  header .status.connected { color: var(--green); }
-  main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-dim); color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 6px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: #384155; }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 11px 20px;
+    background: linear-gradient(180deg, #191d28, #14171f); border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-1); position: sticky; top: 0; z-index: 50;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: .02em; color: #f0f2f7; }
+  header h1::before { content: "▣ "; color: var(--accent); }
+  header .tabs { display: flex; gap: 2px; margin-left: 20px; background: #0f1219; border: 1px solid var(--border-soft); border-radius: 8px; padding: 3px; }
+  header button.tab {
+    background: none; border: none; color: var(--muted); padding: 7px 16px; cursor: pointer;
+    border-radius: 6px; font-size: 13px; font-weight: 500; transition: background .15s, color .15s;
+  }
+  header button.tab:hover { color: var(--text); }
+  header button.tab.active { background: var(--accent); color: white; box-shadow: var(--shadow-1); }
+  header .status {
+    margin-left: auto; font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 20px;
+    background: #1c2029; border: 1px solid var(--border-soft);
+  }
+  header .status.connected { color: var(--green); border-color: #1e3d2c; background: #10241a; }
+  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
   section.view { display: none; }
-  section.view.active { display: block; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
-  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+  section.view.active { display: block; animation: viewIn .12s ease-out; }
+  @keyframes viewIn { from { opacity: 0; } to { opacity: 1; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-1);
+  }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
-  label { font-size: 12px; color: var(--muted); }
-  input, select { background: #0b0d12; border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 5px; font-size: 13px; }
-  input[type=checkbox] { width: auto; }
-  button { background: #232838; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
-  button.danger { background: #3a1f22; border-color: #5c2b30; color: #ff9b9b; }
-  button.small { padding: 3px 8px; font-size: 12px; }
-  #screen { font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #05060a; color: #6ee06e; padding: 12px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); min-height: 340px; }
-  #oiaLine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+  label { font-size: 12px; color: var(--muted); font-weight: 500; }
+  input, select {
+    background: #0b0d13; border: 1px solid var(--border); color: var(--text); padding: 7px 9px;
+    border-radius: 6px; font-size: 13px; transition: border-color .15s, box-shadow .15s; font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,157,255,.15); }
+  input[type=checkbox] { width: auto; accent-color: var(--accent); }
+  button {
+    background: #1e2330; border: 1px solid var(--border); color: var(--text); padding: 7px 14px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s;
+  }
+  button:hover { border-color: var(--accent); background: #232a3a; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 2px 8px rgba(91,157,255,.3); }
+  button.primary:hover { background: #6ba8ff; border-color: #6ba8ff; }
+  button.danger { background: #2e1618; border-color: #4a2226; color: #ff9b9b; }
+  button.danger:hover { border-color: var(--red); background: #3a1a1d; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  #screen {
+    font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #060810; color: #6ee06e;
+    padding: 14px; border-radius: 7px; white-space: pre; overflow-x: auto; border: 1px solid var(--border);
+    min-height: 340px; box-shadow: inset 0 1px 4px rgba(0,0,0,.5);
+  }
+  #oiaLine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
-  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 2px; }
-  td input:focus { background: #0b0d12; border-radius: 3px; }
+  th, td { border-bottom: 1px solid var(--border-soft); padding: 8px 10px; text-align: left; }
+  thead th { border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: var(--panel-alt); }
+  tbody tr { transition: background .1s; }
+  tbody tr:hover { background: #1a1f2c; }
+  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 3px 2px; border-radius: 4px; }
+  td input:focus { background: #0b0d13; box-shadow: 0 0 0 2px rgba(91,157,255,.2); outline: none; }
   .pass { color: var(--green); font-weight: 600; }
   .fail { color: var(--red); font-weight: 600; }
   .keypad { display: flex; flex-wrap: wrap; gap: 6px; }
-  pre.dump { background: #05060a; padding: 8px; border-radius: 5px; font-size: 11px; max-height: 200px; overflow: auto; }
+  pre.dump { background: #060810; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 200px; overflow: auto; }
   .muted { color: var(--muted); font-size: 12px; }
-  .toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel); border: 1px solid var(--border); padding: 10px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-  .toast.show { opacity: 1; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #1d2230; border: 1px solid var(--border);
+    padding: 11px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transform: translateY(6px);
+    transition: opacity .2s, transform .2s; pointer-events: none; box-shadow: var(--shadow-2);
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
 
   .project { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
   .filelist { position: sticky; top: 16px; }
   .filemain { min-width: 0; }
   #fileList { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
-  .file-item { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  .file-item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .12s; border: 1px solid transparent; }
   .file-item:hover { background: #1e2330; }
-  .file-item.active { background: #223049; }
+  .file-item.active { background: #1d2c45; border-color: var(--accent-dim); }
   .file-item .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-item .fcount { color: var(--muted); font-size: 11px; }
-  .file-item .frename { opacity: 0; border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+  .file-item .fcount { color: var(--muted); font-size: 11px; background: #0f1219; padding: 1px 6px; border-radius: 10px; }
+  .file-item .frename { opacity: 0; border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; transition: opacity .12s, color .12s; }
+  .file-item .frename:hover { color: var(--text); }
   .file-item:hover .frename { opacity: 1; }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
 
-  .ac-dropdown { position: fixed; z-index: 500; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; max-height: 280px; overflow-y: auto; box-shadow: 0 12px 28px rgba(0,0,0,.5); }
-  .ac-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #1c2029; }
+  .ac-dropdown { position: fixed; z-index: 500; background: #1a1e29; border: 1px solid var(--border); border-radius: 8px; max-height: 280px; overflow-y: auto; box-shadow: var(--shadow-2); }
+  .ac-item { padding: 7px 11px; cursor: pointer; border-bottom: 1px solid var(--border-soft); }
   .ac-item:last-child { border-bottom: none; }
   .ac-item.active, .ac-item:hover { background: #223049; }
   .ac-item .ac-name { font-family: var(--mono); color: var(--accent); font-weight: 600; font-size: 13px; }
-  .ac-item .ac-desc { color: var(--muted); font-size: 11px; margin-top: 1px; white-space: normal; }
+  .ac-item .ac-desc { color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; }
 
-  .docs-panel { background: #0b0d12; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-top: 8px; }
+  .docs-panel { background: #0b0d13; border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; font-size: 12px; margin-top: 10px; }
   .docs-panel .docs-name { font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 13px; }
   .docs-panel .docs-syntax { font-family: var(--mono); color: #8fe6a8; margin: 5px 0; white-space: pre-wrap; }
   .docs-panel .docs-desc { color: var(--text); margin-bottom: 6px; line-height: 1.4; }
@@ -303,10 +350,15 @@ function renderCommandDocs(panel, cmd) {
     ${params ? '<div class="docs-params">' + params + '</div>' : ""}`;
 }
 
-/** Attaches type-ahead suggestions + a live docs panel to a text input, IDE-style. Used by the
- * Scenarios tab's CSV cell editor (the "command" column) — the Terminal tab's live typing has
- * no input box to attach this to, it uses updateDocsFromCursorField() instead. */
-function attachCommandAutocomplete(input, docsPanel) {
+/**
+ * Generic type-ahead dropdown for a text input, IDE-style — arrow keys/Enter/Tab to pick, Escape
+ * to dismiss, click-away closes. Used for the CL "command" column, and generalized for the
+ * scenario builder's action/target/value columns below. `opts`:
+ *   getItems(query, input)  -> [{ name, description, insertValue? }], called on every keystroke
+ *   onSelect(item, input)   -> optional; defaults to setting input.value = item.insertValue||item.name
+ *   renderDocs(item|null)   -> optional; called with the exact/active match for a side docs panel
+ */
+function attachAutocomplete(input, opts) {
   let dropdown = null, items = [], activeIndex = -1;
 
   function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
@@ -315,14 +367,16 @@ function attachCommandAutocomplete(input, docsPanel) {
     if (!dropdown) return;
     [...dropdown.children].forEach((el, idx) => el.classList.toggle("active", idx === i));
     activeIndex = i;
-    if (items[i]) renderCommandDocs(docsPanel, items[i]);
+    if (items[i] && opts.renderDocs) opts.renderDocs(items[i]);
   }
 
-  function selectCommand(cmd) {
-    input.value = cmd.name + " ";
+  function selectItem(item) {
+    if (opts.onSelect) opts.onSelect(item, input);
+    else input.value = item.insertValue != null ? item.insertValue : item.name;
     closeDropdown();
-    renderCommandDocs(docsPanel, cmd);
+    if (opts.renderDocs) opts.renderDocs(item);
     input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
   }
 
   function showDropdown(matches) {
@@ -334,13 +388,14 @@ function attachCommandAutocomplete(input, docsPanel) {
     dropdown.style.left = rect.left + "px";
     dropdown.style.top = (rect.bottom + 2) + "px";
     dropdown.style.width = Math.max(rect.width, 280) + "px";
-    matches.forEach(cmd => {
-      const item = document.createElement("div");
-      item.className = "ac-item";
-      item.innerHTML = `<div class="ac-name">${cmd.name}</div><div class="ac-desc">${cmd.description}</div>`;
-      item.addEventListener("mousedown", e => { e.preventDefault(); selectCommand(cmd); });
-      item.addEventListener("mouseenter", () => setActive(items.indexOf(cmd)));
-      dropdown.appendChild(item);
+    matches.forEach(item => {
+      const el = document.createElement("div");
+      el.className = "ac-item";
+      el.innerHTML = `<div class="ac-name">${item.name}</div>` +
+        (item.description ? `<div class="ac-desc">${item.description}</div>` : "");
+      el.addEventListener("mousedown", e => { e.preventDefault(); selectItem(item); });
+      el.addEventListener("mouseenter", () => setActive(items.indexOf(item)));
+      dropdown.appendChild(el);
     });
     document.body.appendChild(dropdown);
     items = matches;
@@ -348,13 +403,14 @@ function attachCommandAutocomplete(input, docsPanel) {
   }
 
   input.addEventListener("input", () => {
-    const verb = input.value.trim().split(/\s+/)[0].toUpperCase();
-    if (!verb) { closeDropdown(); renderCommandDocs(docsPanel, null); return; }
-    const exact = CL_COMMANDS.find(c => c.name === verb);
-    const matches = CL_COMMANDS.filter(c => c.name.startsWith(verb) && c.name !== verb).slice(0, 10);
-    if (exact) matches.unshift(exact);
+    const matches = opts.getItems(input.value, input) || [];
     showDropdown(matches);
-    renderCommandDocs(docsPanel, exact || null);
+    if (opts.renderDocs) opts.renderDocs(matches.length === 1 ? matches[0] : null);
+  });
+
+  input.addEventListener("focus", () => {
+    const matches = opts.getItems(input.value, input) || [];
+    if (matches.length) showDropdown(matches);
   });
 
   input.addEventListener("keydown", e => {
@@ -362,12 +418,119 @@ function attachCommandAutocomplete(input, docsPanel) {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive(Math.min(activeIndex + 1, items.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(activeIndex - 1, 0)); }
     else if (e.key === "Enter" || e.key === "Tab") {
-      if (activeIndex >= 0 && items[activeIndex]) { e.preventDefault(); selectCommand(items[activeIndex]); }
+      if (activeIndex >= 0 && items[activeIndex]) { e.preventDefault(); selectItem(items[activeIndex]); }
       else closeDropdown();
     } else if (e.key === "Escape") { closeDropdown(); }
   });
 
   input.addEventListener("blur", () => setTimeout(closeDropdown, 150));
+}
+
+/** Attaches type-ahead suggestions + a live docs panel to a text input, IDE-style. Used by the
+ * Scenarios tab's CSV cell editor (the "command" column) — the Terminal tab's live typing has
+ * no input box to attach this to, it uses updateDocsFromCursorField() instead. */
+function attachCommandAutocomplete(input, docsPanel) {
+  attachAutocomplete(input, {
+    getItems(query) {
+      const verb = query.trim().split(/\s+/)[0].toUpperCase();
+      if (!verb) return [];
+      const exact = CL_COMMANDS.find(c => c.name === verb);
+      const matches = CL_COMMANDS.filter(c => c.name.startsWith(verb) && c.name !== verb).slice(0, 10)
+        .map(c => ({ name: c.name, description: c.description, insertValue: c.name + " ", cmd: c }));
+      if (exact) matches.unshift({ name: exact.name, description: exact.description, insertValue: exact.name + " ", cmd: exact });
+      return matches;
+    },
+    renderDocs(item) { renderCommandDocs(docsPanel, item ? item.cmd : null); },
+  });
+}
+
+// ---------- scenario builder: action/target/value suggestions, GenericStepFlow's ("custom-steps") vocabulary ----------
+const ACTION_ITEMS = [
+  { name: "type", description: "Fill an input field. target: label:<text> or <row>,<col>. value: text to enter." },
+  { name: "key", description: "Send an AID key. value: ENTER, F3, TAB, PAGEDOWN, ... (this row's target is unused)." },
+  { name: "check", description: "Assert on-screen text. target: label:<text>, row:<n>, or message. expected: substring to match." },
+  { name: "extract", description: "Pull a value into results. target: label:<text>, row:<n>, message, or rows:<start>-<end>[:<colStart>-<colEnd>]. value: output field name." },
+  { name: "include", description: "Splice in another scenario file's steps here. target: file name (no .csv)." },
+  { name: "connect", description: "Open a session (put alone in its own case, e.g. \"setup\"). target: host. value: port (default 23). expected: \"true\" for SSL." },
+  { name: "wait", description: "Sleep N seconds (capped 120) for something outside the 5250 buffer. value: seconds." },
+];
+
+const KEY_ITEMS = [
+  { name: "ENTER", description: "Submit the screen" },
+  ...Array.from({ length: 24 }, (_, i) => ({ name: "F" + (i + 1), description: "PF" + (i + 1) })),
+  { name: "PA1", description: "Program attention 1" }, { name: "PA2", description: "Program attention 2" }, { name: "PA3", description: "Program attention 3" },
+  { name: "TAB", description: "Next field" }, { name: "BACK_TAB", description: "Previous field" },
+  { name: "HOME", description: "Cursor to first input field" },
+  { name: "UP", description: "Cursor up" }, { name: "DOWN", description: "Cursor down" }, { name: "LEFT", description: "Cursor left" }, { name: "RIGHT", description: "Cursor right" },
+  { name: "PAGE_UP", description: "Roll up" }, { name: "PAGE_DOWN", description: "Roll down" },
+  { name: "CLEAR", description: "Clear the screen" }, { name: "HELP", description: "Help key" }, { name: "SYSREQ", description: "System request" },
+  { name: "DELETE", description: "Delete character" }, { name: "INSERT", description: "Toggle insert mode" },
+  { name: "ERASE_EOF", description: "Erase to end of field" }, { name: "ERASE_FIELD", description: "Erase entire field" },
+  { name: "BACK_SPACE", description: "Backspace" }, { name: "FIELD_EXIT", description: "Field exit" }, { name: "PRINT", description: "Print screen" },
+];
+
+const TARGET_TEMPLATES = {
+  type: [
+    { name: "label:", description: "Anchor on a label's text, e.g. label:User", insertValue: "label:" },
+    { name: "<row>,<col>", description: "Explicit 1-based screen position, e.g. 20,7", insertValue: "" },
+  ],
+  check: [
+    { name: "label:", description: "Anchor on a label's text", insertValue: "label:" },
+    { name: "row:", description: "Whole row text, e.g. row:24", insertValue: "row:" },
+    { name: "message", description: "The message line (row 24)", insertValue: "message" },
+  ],
+  extract: [
+    { name: "label:", description: "Anchor on a label's text", insertValue: "label:" },
+    { name: "row:", description: "Whole row text, e.g. row:24", insertValue: "row:" },
+    { name: "message", description: "The message line (row 24)", insertValue: "message" },
+    { name: "rows:", description: "Multiple rows off a list/subfile, e.g. rows:9-13", insertValue: "rows:" },
+  ],
+  connect: [{ name: "pub400.com", description: "Public IBM i test system", insertValue: "pub400.com" }],
+};
+
+/** Filters a fixed item list by substring/prefix match against the current input value. */
+function filterItems(list, query) {
+  const q = (query || "").trim().toUpperCase();
+  if (!q) return list;
+  const starts = list.filter(i => i.name.toUpperCase().startsWith(q));
+  const contains = list.filter(i => !i.name.toUpperCase().startsWith(q) && i.name.toUpperCase().includes(q));
+  return [...starts, ...contains].slice(0, 12);
+}
+
+/** Wires action/target/value autocomplete onto one scenario-builder <tr>'s inputs, for flows
+ * whose columns match GenericStepFlow's vocabulary (case/step/action/target/value/expected). */
+function attachStepRowAutocomplete(tr, columns) {
+  const byCol = c => tr.querySelector(`input[data-col="${c}"]`);
+  const actionInput = byCol("action"), targetInput = byCol("target"), valueInput = byCol("value");
+  if (!actionInput) return; // not a GenericStepFlow-shaped table (e.g. run-command)
+
+  attachAutocomplete(actionInput, { getItems: q => filterItems(ACTION_ITEMS, q) });
+
+  if (targetInput) {
+    attachAutocomplete(targetInput, {
+      getItems(q) {
+        const action = actionInput.value.trim().toLowerCase();
+        if (action === "include") return filterItems(scenarioFilesForInclude(), q);
+        return filterItems(TARGET_TEMPLATES[action] || [], q);
+      },
+    });
+  }
+
+  if (valueInput) {
+    attachAutocomplete(valueInput, {
+      getItems(q) {
+        if (actionInput.value.trim().toLowerCase() !== "key") return [];
+        return filterItems(KEY_ITEMS, q);
+      },
+    });
+  }
+}
+
+/** Scenario files in the current flow, as autocomplete items for an "include" step's target. */
+function scenarioFilesForInclude() {
+  return (currentFlowFiles || [])
+    .filter(f => f.name !== currentFile)
+    .map(f => ({ name: f.name, description: f.rows + " row" + (f.rows === 1 ? "" : "s") }));
 }
 
 // ---------- tabs ----------
@@ -917,6 +1080,7 @@ let currentColumns = [];
 let currentFlow = null;
 let currentFile = null;
 let flowsByName = {};
+let currentFlowFiles = []; // [{name, rows}], refreshed by loadFileList() — feeds "include" target suggestions
 
 async function loadFlows() {
   const res = await fetch("/api/flows");
@@ -968,6 +1132,7 @@ setInterval(refreshSessionBadge, 4000);
 async function loadFileList() {
   const res = await fetch("/api/scenario-files?flow=" + encodeURIComponent(currentFlow));
   const json = await res.json();
+  currentFlowFiles = json.files || [];
   const list = $("fileList");
   list.innerHTML = "";
   if (!json.files.length) {
@@ -1117,6 +1282,7 @@ function addRowToTable(row, columns) {
     if (c.toLowerCase() === "command") attachCommandAutocomplete(input, $("scenarioDocsPanel"));
     td.appendChild(input); tr.appendChild(td);
   });
+  attachStepRowAutocomplete(tr, columns);
   const tdDel = document.createElement("td");
   const del = document.createElement("button");
   del.textContent = "✕"; del.className = "small danger";

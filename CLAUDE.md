@@ -177,14 +177,17 @@ which redeclares `USER`/`PASSWORD` on top of its own `COMMAND`/
 Variables panel, or `PUT /api/scenario-vars`), `DataDrivenRunner` appends that
 value set as one more row of `scenarios/<flow>/<file>.data.csv` (columns =
 union of every variable name ever saved for that file — new columns backfill
-blank on older rows) and (re)writes `scenarios/<flow>/<file>.bat` +
-`<file>.run.ps1` next to it. Double-click the `.bat` (or run it from CI) to
-replay the whole suite once per row of `.data.csv`, each time with that row's
-`${NAME}` values passed as `--var` overrides to `run-suite` — a lightweight
-data-driven test matrix built purely from "values I've actually saved and
-tried," no separate authoring step. The `.bat`/`.run.ps1` pair is regenerated
-(overwritten) on every vars save; edit `.data.csv` by hand (or re-save vars)
-rather than the generated scripts.
+blank on older rows) and (re)writes `scenarios/<flow>/<file>.bat` (Windows) +
+`<file>.sh` (Linux/macOS) next to it. Run either one (or from CI) to replay
+the whole suite once per row of `.data.csv`, each time with that row's
+`${NAME}` values overriding the saved `.vars.csv` for that run only — a
+lightweight data-driven test matrix built purely from "values I've actually
+saved and tried," no separate authoring step. Both scripts are thin wrappers
+around `run-suite --data-csv <path>` (see `Cli.runSuite`/`HelpText`'s
+`run-suite` entry) - the actual per-row loop and CSV parsing live in Java
+(reusing `Csv.java`), not duplicated in batch/shell. The `.bat`/`.sh` pair is
+regenerated (overwritten) on every vars save; edit `.data.csv` by hand (or
+re-save vars) rather than the generated scripts.
 
 Scenario files live in `scenarios/<flow-name>/<file-name>.csv` (folder per
 flow, multiple named files each — a real project explorer, not one fixed

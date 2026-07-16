@@ -247,14 +247,41 @@ public final class Cli {
     @SuppressWarnings("unchecked")
     private static void runSuite(String[] args) throws Exception {
         Map<String, String> opts = parseOpts(args, 1);
-        Map<String, String> vars = parseVars(args);
+        Map<String, String> baseVars = parseVars(args);
         String flow = require(opts, "flow");
         String file = require(opts, "file");
         String session = opts.getOrDefault("session", "default");
         long timeoutSec = Long.parseLong(opts.getOrDefault("timeout", "300"));
+        String dataCsv = opts.get("data-csv");
 
         ensureDaemonRunning();
 
+        if (dataCsv == null) {
+            System.exit(runOnce(flow, file, session, timeoutSec, baseVars) ? 0 : 1);
+            return;
+        }
+
+        List<Map<String, String>> rows = Csv.read(new File(dataCsv));
+        if (rows.isEmpty()) {
+            System.out.println("No rows in " + dataCsv + " - nothing to run.");
+            System.exit(0);
+            return;
+        }
+        int failed = 0;
+        for (int i = 0; i < rows.size(); i++) {
+            Map<String, String> rowVars = new LinkedHashMap<>(baseVars);
+            rowVars.putAll(rows.get(i));
+            System.err.println("=== row " + (i + 1) + "/" + rows.size() + " ===");
+            if (!runOnce(flow, file, session, timeoutSec, rowVars)) failed++;
+        }
+        System.out.println();
+        System.out.println((rows.size() - failed) + " / " + rows.size() + " row(s) passed");
+        System.exit(failed == 0 ? 0 : 1);
+    }
+
+    /** Runs one flow/file once against one variable set; returns whether every scenario in it passed. */
+    @SuppressWarnings("unchecked")
+    private static boolean runOnce(String flow, String file, String session, long timeoutSec, Map<String, String> vars) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("flow", flow);
         body.put("file", file);
@@ -265,7 +292,7 @@ public final class Cli {
         if (!Boolean.TRUE.equals(startJson.get("ok"))) {
             System.err.println("Error: " + startJson.get("error"));
             System.exit(2);
-            return;
+            return false;
         }
         String runId = (String) startJson.get("runId");
         long total = ((Number) startJson.get("total")).longValue();
@@ -286,7 +313,7 @@ public final class Cli {
             if (System.currentTimeMillis() > deadline) {
                 System.err.println("Timed out after " + timeoutSec + "s waiting for the run to finish");
                 System.exit(3);
-                return;
+                return false;
             }
             Thread.sleep(500);
         }
@@ -294,7 +321,7 @@ public final class Cli {
         if ("error".equals(status.get("status"))) {
             System.err.println("Run failed: " + status.get("error"));
             System.exit(2);
-            return;
+            return false;
         }
 
         List<Object> results = (List<Object>) status.get("results");
@@ -316,9 +343,9 @@ public final class Cli {
             if (extracted != null && !extracted.isEmpty()) {
                 for (Map.Entry<String, Object> e : extracted.entrySet()) {
                     if (e.getValue() instanceof java.util.List) {
-                        java.util.List<?> rows = (java.util.List<?>) e.getValue();
-                        System.out.println("    " + e.getKey() + " (" + rows.size() + " rows):");
-                        for (Object row : rows) System.out.println("      " + row);
+                        java.util.List<?> rowsE = (java.util.List<?>) e.getValue();
+                        System.out.println("    " + e.getKey() + " (" + rowsE.size() + " rows):");
+                        for (Object row : rowsE) System.out.println("      " + row);
                     } else {
                         System.out.println("    " + e.getKey() + " = " + e.getValue());
                     }
@@ -328,7 +355,7 @@ public final class Cli {
         }
         System.out.println();
         System.out.println(passed + " / " + results.size() + " passed");
-        System.exit(passed == results.size() ? 0 : 1);
+        return passed == results.size();
     }
 
     private static Map<String, String> parseVars(String[] args) {
