@@ -168,6 +168,11 @@
   #btnSelectArea.active { background: var(--accent); border-color: var(--accent); color: white; }
   #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(79,157,255,.18); pointer-events: none; z-index: 10; }
   #areaSelectOverlay.locked { border-style: solid; border-color: #ffcf5c; background: rgba(255,207,92,.22); }
+
+  #scenarioTable .row-grip { cursor: grab; color: var(--muted); text-align: center; width: 20px; user-select: none; }
+  #scenarioTable tbody tr.dragging { opacity: .4; }
+  #scenarioTable tbody tr.drop-above { box-shadow: inset 0 2px 0 0 var(--accent); }
+  #scenarioTable tbody tr.drop-below { box-shadow: inset 0 -2px 0 0 var(--accent); }
 </style>
 </head>
 <body>
@@ -1321,14 +1326,26 @@ function renderScenarioTable(rows, columns) {
   currentColumns = columns;
   const thead = document.querySelector("#scenarioTable thead");
   const tbody = document.querySelector("#scenarioTable tbody");
-  thead.innerHTML = "<tr>" + columns.map(c => `<th>${c}</th>`).join("") + "<th></th></tr>";
+  thead.innerHTML = "<tr><th></th>" + columns.map(c => `<th>${c}</th>`).join("") + "<th></th></tr>";
   tbody.innerHTML = "";
   rows.forEach(row => addRowToTable(row, columns));
 }
 
 function addRowToTable(row, columns) {
   const tbody = document.querySelector("#scenarioTable tbody");
+  tbody.appendChild(buildScenarioRow(row, columns));
+}
+
+/** Builds one <tr> (grip + data cells + duplicate/delete buttons), fully wired, without
+ * inserting it anywhere - the caller decides where it goes (append, or right after another row). */
+function buildScenarioRow(row, columns) {
   const tr = document.createElement("tr");
+  tr.draggable = true;
+
+  const tdGrip = document.createElement("td");
+  tdGrip.className = "row-grip"; tdGrip.textContent = "⠿"; tdGrip.title = "Drag to reorder";
+  tr.appendChild(tdGrip);
+
   columns.forEach(c => {
     const td = document.createElement("td");
     const input = document.createElement("input");
@@ -1338,12 +1355,89 @@ function addRowToTable(row, columns) {
     td.appendChild(input); tr.appendChild(td);
   });
   attachStepRowAutocomplete(tr, columns);
-  const tdDel = document.createElement("td");
+
+  const tdActions = document.createElement("td");
+  const dup = document.createElement("button");
+  dup.textContent = "⧉"; dup.className = "small"; dup.title = "Duplicate this step";
+  dup.addEventListener("click", () => duplicateScenarioRow(tr));
   const del = document.createElement("button");
-  del.textContent = "✕"; del.className = "small danger";
-  del.addEventListener("click", () => tr.remove());
-  tdDel.appendChild(del); tr.appendChild(tdDel);
-  tbody.appendChild(tr);
+  del.textContent = "✕"; del.className = "small danger"; del.style.marginLeft = "4px";
+  del.addEventListener("click", () => { tr.remove(); renumberSteps(); });
+  tdActions.append(dup, del); tr.appendChild(tdActions);
+
+  attachRowDragHandlers(tr);
+  return tr;
+}
+
+/** Clones a row (same case/values) right after itself, then renumbers so the copy gets its own
+ * step number without colliding with what follows - "duplicate this step" from the row itself. */
+function duplicateScenarioRow(tr) {
+  const row = {};
+  tr.querySelectorAll("input").forEach(inp => row[inp.dataset.col] = inp.value);
+  const clone = buildScenarioRow(row, currentColumns);
+  tr.parentNode.insertBefore(clone, tr.nextSibling);
+  renumberSteps();
+}
+
+// ---------- drag-and-drop step reordering ----------
+// Reordering is scoped to rows sharing the same "case" (a step's execution order is its numeric
+// "step" cell, sorted within its case by GenericStepFlow - moving a row's table position alone
+// does nothing unless the "step" values are renumbered to match, which renumberSteps() does after
+// every drop/duplicate/delete. Cross-case drops are ignored (dropped back where it started) -
+// moving a step into a different scenario isn't supported yet.
+let draggedRow = null;
+
+function attachRowDragHandlers(tr) {
+  tr.addEventListener("dragstart", (e) => {
+    draggedRow = tr;
+    tr.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  tr.addEventListener("dragend", () => {
+    tr.classList.remove("dragging");
+    draggedRow = null;
+    document.querySelectorAll("#scenarioTable .drop-above, #scenarioTable .drop-below").forEach(el => el.classList.remove("drop-above", "drop-below"));
+  });
+  tr.addEventListener("dragover", (e) => {
+    if (!draggedRow || draggedRow === tr) return;
+    e.preventDefault();
+    const rect = tr.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    tr.classList.toggle("drop-above", before);
+    tr.classList.toggle("drop-below", !before);
+  });
+  tr.addEventListener("dragleave", () => tr.classList.remove("drop-above", "drop-below"));
+  tr.addEventListener("drop", (e) => {
+    e.preventDefault();
+    tr.classList.remove("drop-above", "drop-below");
+    if (!draggedRow || draggedRow === tr) return;
+    const caseCol = currentColumns.findIndex(c => c.toLowerCase() === "case") >= 0 ? "case" : null;
+    if (caseCol) {
+      const draggedCase = draggedRow.querySelector(`input[data-col="${caseCol}"]`)?.value || "";
+      const targetCase = tr.querySelector(`input[data-col="${caseCol}"]`)?.value || "";
+      if (draggedCase !== targetCase) { toast(`Can't move a step into a different case (${draggedCase} → ${targetCase})`); return; }
+    }
+    const rect = tr.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    tr.parentNode.insertBefore(draggedRow, before ? tr : tr.nextSibling);
+    renumberSteps();
+  });
+}
+
+/** Renumbers the "step" column to 1..N, in current table order, separately per "case" value -
+ * keeps the numbers that drive actual execution order in sync with what's visually shown, after
+ * a drag reorder, a duplicate, or a delete. No-op for flows without case/step columns. */
+function renumberSteps() {
+  if (!currentColumns.some(c => c.toLowerCase() === "step") || !currentColumns.some(c => c.toLowerCase() === "case")) return;
+  const counters = {};
+  document.querySelectorAll("#scenarioTable tbody tr").forEach(tr => {
+    const caseInput = tr.querySelector('input[data-col="case"]');
+    const stepInput = tr.querySelector('input[data-col="step"]');
+    if (!caseInput || !stepInput) return;
+    const caseId = caseInput.value || "";
+    counters[caseId] = (counters[caseId] || 0) + 1;
+    stepInput.value = counters[caseId];
+  });
 }
 
 function readScenarioTable() {
