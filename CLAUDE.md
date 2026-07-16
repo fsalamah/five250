@@ -130,16 +130,25 @@ target/five250.jar connect ...` call brings both up). Two tabs:
 
    `extract` (value = output field name) pulls a value off the screen into
    the result's structured output — a CSV/JSON row, not a pass/fail check.
-   Its `label:` addressing reads straight off the character buffer
-   (`Terminal.readAfterLabel`, stop at 2+ spaces or end of row), so it works
-   for **protected/display-only** text (a balance, a job count) — unlike
-   `type`'s label targeting, which only touches editable `ScreenField`s.
-   Landed data shows up as its own column in `.results.csv`, in the JSON
-   `results[].extracted` map, and in the GUI's Results table. See
-   `scenarios/custom-steps/extract-demo.csv` — pulls active job count, CPU%,
-   and elapsed time off a protected line of WRKACTJOB. Table/subfile
-   scraping (multi-row, multi-page extraction) is a bigger follow-up, not
-   built yet — this covers single-value extraction only.
+   Its `label:`/`row:`/`message` addressing reads straight off the character
+   buffer (`Terminal.readAfterLabel`/`rowText`), so it works for
+   **protected/display-only** text (a balance, a job count) — unlike `type`'s
+   label targeting, which only touches editable `ScreenField`s. `target` also
+   accepts `rows:<start>-<end>[:<colStart>-<colEnd>]` for multi-row/subfile
+   scraping (a WRKACTJOB job list, a WRKSPLF spool list) — the output is a
+   list of lines, not a single string; see `GenericStepFlow.doExtractRows`.
+
+   Landed data shows up three places: its own column in `.results.csv` (a
+   `rows:` list joined with `" | "`), the JSON `results[].extracted` map (a
+   real array there), and the GUI's Results table — AND, separately, as its
+   own plain-text file: `scenarios/<flow>/<file>.<name>.data.txt` (`<name>` is
+   whatever the engineer put in that extract step's `value` cell), one line
+   per extracted value/row, written by `ScenarioRunner.writeExtractedDumps`
+   right alongside the timestamped `.results.<ts>.csv` copies (a `.<ts>.`
+   variant is written too, so a later run never clobbers an earlier dump) —
+   for piping straight into another tool without touching the results CSV at
+   all. See `scenarios/custom-steps/extract-demo.csv` — pulls active job
+   count, CPU%, and elapsed time off a protected line of WRKACTJOB.
 
    `connect` makes a suite fully self-contained — no prior manual Connect
    click needed. Put it alone in its own case (target=host, value=port,

@@ -287,6 +287,8 @@ public final class HttpApi {
                     ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
                     ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
                     ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
+                    ScenarioRunner.writeExtractedDumps(flowDir(flowName), fileName, null, results);
+                    ScenarioRunner.writeExtractedDumps(flowDir(flowName), fileName, ts, results);
                     state.status = "done";
                 } catch (Throwable e) {
                     state.status = "error";

@@ -86,4 +86,30 @@ public final class ScenarioRunner {
             java.nio.file.Files.writeString(f.toPath(), Json.write(results.get(i).toMap()));
         }
     }
+
+    /**
+     * Dumps every `extract` step's output into its own plain-text file, one per distinct output
+     * name (the name an engineer gave that extract step, in its "value" cell) — separate from the
+     * results CSV, for feeding straight into another tool without CSV-column bookkeeping. Named
+     * "<baseName>.<extractName>[.<ts>].data.txt" (ts omitted when null - the "latest" copy). A
+     * "rows:" range (a List) is one line per row; a single value is one line. If more than one
+     * scenario in this run produced the same name, each occurrence is one more line, in run order.
+     */
+    public static void writeExtractedDumps(File dir, String baseName, String ts, List<ScenarioResult> results) throws IOException {
+        Map<String, List<String>> lines = new LinkedHashMap<>();
+        for (ScenarioResult r : results) {
+            for (Map.Entry<String, Object> e : r.extracted.entrySet()) {
+                List<String> out = lines.computeIfAbsent(e.getKey(), k -> new ArrayList<>());
+                Object v = e.getValue();
+                if (v instanceof List) out.addAll((List<String>) v);
+                else out.add(String.valueOf(v));
+            }
+        }
+        if (lines.isEmpty()) return;
+        dir.mkdirs();
+        for (Map.Entry<String, List<String>> e : lines.entrySet()) {
+            String name = baseName + "." + e.getKey() + (ts == null ? "" : "." + ts) + ".data.txt";
+            java.nio.file.Files.writeString(new File(dir, name).toPath(), String.join("\n", e.getValue()) + "\n");
+        }
+    }
 }

@@ -3,4 +3,5 @@ target/
 .idea/
 *.iml
 scenarios/**/*.results*.csv
+scenarios/**/*.data.txt
 docs/samples/
