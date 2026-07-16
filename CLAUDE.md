@@ -141,17 +141,18 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    scraping (a WRKACTJOB job list, a WRKSPLF spool list) — the output is a
    list of lines, not a single string; see `GenericStepFlow.doExtractRows`.
 
-   Landed data shows up three places: its own column in `.results.csv` (a
-   `rows:` list joined with `" | "`), the JSON `results[].extracted` map (a
-   real array there), and the GUI's Results table — AND, separately, as its
-   own plain-text file: `scenarios/<flow>/<file>.<name>.data.txt` (`<name>` is
-   whatever the engineer put in that extract step's `value` cell), one line
-   per extracted value/row, written by `ScenarioRunner.writeExtractedDumps`
-   right alongside the timestamped `.results.<ts>.csv` copies (a `.<ts>.`
-   variant is written too, so a later run never clobbers an earlier dump) —
-   for piping straight into another tool without touching the results CSV at
-   all. See `scenarios/custom-steps/extract-demo.csv` — pulls active job
-   count, CPU%, and elapsed time off a protected line of WRKACTJOB.
+   Landed data shows up three places: its own column in `results/<flow>/
+   <file>.results.csv` (a `rows:` list joined with `" | "`), the JSON
+   `results[].extracted` map (a real array there), and the GUI's Results
+   table — AND, separately, as its own plain-text file:
+   `extracted/<flow>/<file>.<name>.data.txt` (`<name>` is whatever the
+   engineer put in that extract step's `value` cell), one line per extracted
+   value/row, written by `ScenarioRunner.writeExtractedDumps` right alongside
+   a timestamped `.<ts>.data.txt` copy (so a later run never clobbers an
+   earlier dump) — for piping straight into another tool without touching
+   the results CSV at all. See `scenarios/custom-steps/extract-demo.csv` —
+   pulls active job count, CPU%, and elapsed time off a protected line of
+   WRKACTJOB.
 
    `connect` makes a suite fully self-contained — no prior manual Connect
    click needed. Put it alone in its own case (target=host, value=port,
@@ -203,8 +204,13 @@ re-save vars) rather than the generated scripts.
 
 Scenario files live in `scenarios/<flow-name>/<file-name>.csv` (folder per
 flow, multiple named files each — a real project explorer, not one fixed
-file). Results are written to `scenarios/<flow-name>/<file-name>.results.csv`
-after each run; failing scenarios also get a full screen-buffer dump at
+file) — that folder holds only source/driver files (`.csv`, `.vars.csv`,
+`.data.csv`, `.bat`/`.sh`), never generated run output. Results are written
+to `results/<flow-name>/<file-name>.results.csv` (plus a timestamped copy)
+after each run, in a top-level `results/` folder (sibling to `scenarios/`),
+mirroring the flow/file structure; `extract` step dumps go the same way,
+under a top-level `extracted/` folder (see above). Failing scenarios also
+get a full screen-buffer dump at
 `docs/samples/failures/<flow-name>/<file-name>/row-N.json` (cheap — ~2KB
 each, capture liberally).
 

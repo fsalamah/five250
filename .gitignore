@@ -2,6 +2,6 @@ target/
 *.class
 .idea/
 *.iml
-scenarios/**/*.results*.csv
-scenarios/**/*.data.txt
+results/
+extracted/
 docs/samples/

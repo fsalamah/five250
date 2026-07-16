@@ -28,6 +28,8 @@ public final class HttpApi {
     public static final int PORT = 25251;
 
     private static final File SCENARIOS_DIR = Home.file("scenarios");
+    private static final File RESULTS_DIR = Home.file("results");
+    private static final File EXTRACTED_DIR = Home.file("extracted");
     private static final File FAILURES_DIR = Home.file("docs/samples/failures");
     private static final File REPLAYS_DIR = Home.file("docs/samples/replays");
     private static final DateTimeFormatter RUN_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
@@ -281,14 +283,16 @@ public final class HttpApi {
                     // because /api/scenarios/replay's simple flow/file/index query resolves
                     // against the untimestamped replay path.
                     String ts = LocalDateTime.now().format(RUN_TIMESTAMP);
-                    ScenarioRunner.writeResults(new File(flowDir(flowName), fileName + ".results.csv"), results);
-                    ScenarioRunner.writeResults(new File(flowDir(flowName), fileName + ".results." + ts + ".csv"), results);
+                    File resultsDir = new File(RESULTS_DIR, flowName);
+                    File extractedDir = new File(EXTRACTED_DIR, flowName);
+                    ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results.csv"), results);
+                    ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results." + ts + ".csv"), results);
                     ScenarioRunner.writeFailureDumps(new File(new File(FAILURES_DIR, flowName), fileName), results);
                     ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
                     ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
                     ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
-                    ScenarioRunner.writeExtractedDumps(flowDir(flowName), fileName, null, results);
-                    ScenarioRunner.writeExtractedDumps(flowDir(flowName), fileName, ts, results);
+                    ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
+                    ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
                     state.status = "done";
                 } catch (Throwable e) {
                     state.status = "error";
