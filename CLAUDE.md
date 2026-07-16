@@ -214,6 +214,15 @@ get a full screen-buffer dump at
 `docs/samples/failures/<flow-name>/<file-name>/row-N.json` (cheap — ~2KB
 each, capture liberally).
 
+**Disconnect when done**: `/api/scenarios/run`'s `disconnectOnFinish` flag
+(GUI: the "Disconnect when done" checkbox next to Headless; CLI:
+`run-suite --disconnect-on-finish`) closes the session in a `finally` after
+the run, regardless of PASS/FAIL or even a run-level error —
+`SessionService.disconnect()`, the same close+deregister logic the manual
+Disconnect button and RPC use. Off by default: a suite with no `disconnect`
+step of its own should leave the session exactly as it left it, not have
+one silently imposed.
+
 **Replay**: every scenario captures a full screen snapshot at every step
 (pass or fail, not just failures) into `ScenarioResult.steps` — see
 `GenericStepFlow.runGroup()` and `RunCommandFlow.run()`, both call

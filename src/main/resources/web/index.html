@@ -167,6 +167,7 @@
   #terminalScreenPanel { position: relative; }
   #btnSelectArea.active { background: var(--accent); border-color: var(--accent); color: white; }
   #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(79,157,255,.18); pointer-events: none; z-index: 10; }
+  #areaSelectOverlay.locked { border-style: solid; border-color: #ffcf5c; background: rgba(255,207,92,.22); }
 </style>
 </head>
 <body>
@@ -265,6 +266,7 @@
               <label>Run against session</label><input id="scenarioSession" autocomplete="off" value="default" style="width:90px">
               <span id="sessionBadge" class="badge">checking…</span>
               <label><input type="checkbox" id="headless"> Headless</label>
+              <label title="Close the session when the run ends, whether it passed or failed - regardless of whether the suite itself has its own disconnect step"><input type="checkbox" id="disconnectOnFinish"> Disconnect when done</label>
               <button id="btnAddRow">+ Row</button>
               <button id="btnSaveScenarios">Save</button>
               <button class="primary" id="btnRunScenarios">Run All</button>
@@ -713,13 +715,18 @@ document.addEventListener("mouseup", async (e) => {
   const start = areaPixelToRowCol(areaDragStart.x, areaDragStart.y);
   const end = areaPixelToRowCol(e.clientX, e.clientY);
   areaDragStart = null;
-  $("areaSelectOverlay").style.display = "none";
 
   const rowStart = Math.min(start.row, end.row), rowEnd = Math.max(start.row, end.row);
   const colStart = Math.min(start.col, end.col), colEnd = Math.max(start.col, end.col);
-  if (rowStart === rowEnd && colStart === colEnd) return; // a click, not a drag — ignore
+  if (rowStart === rowEnd && colStart === colEnd) { $("areaSelectOverlay").style.display = "none"; return; } // a click, not a drag — ignore
 
+  // Keep the rectangle highlighted (now "locked in" — solid border, not the drag's dashed one)
+  // through the naming prompt, instead of vanishing the instant the mouse is released — otherwise
+  // there's nothing on screen to double-check against while typing the output name.
+  $("areaSelectOverlay").classList.add("locked");
   const name = prompt(`Output field name for rows ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}:`, "extracted_data");
+  $("areaSelectOverlay").classList.remove("locked");
+  $("areaSelectOverlay").style.display = "none";
   if (!name) return;
   const target = colEnd - colStart >= 78 // near-full-width drag: skip the column slice, keep the whole line
     ? `rows:${rowStart}-${rowEnd}`
@@ -1335,7 +1342,7 @@ $("btnRunScenarios").addEventListener("click", async () => {
 
   const startRes = await fetch("/api/scenarios/run", {
     method: "POST",
-    body: JSON.stringify({ flow: currentFlow, file: currentFile, sessionId: sid })
+    body: JSON.stringify({ flow: currentFlow, file: currentFile, sessionId: sid, disconnectOnFinish: $("disconnectOnFinish").checked })
   });
   const startJson = await startRes.json();
   if (!startJson.ok) { toast("Error: " + startJson.error); return; }

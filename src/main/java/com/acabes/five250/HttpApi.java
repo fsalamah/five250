@@ -248,6 +248,7 @@ public final class HttpApi {
         String flowName = (String) req.get("flow");
         String fileName = safeName((String) req.get("file"));
         String sessionId = req.getOrDefault("sessionId", "default").toString();
+        boolean disconnectOnFinish = Boolean.TRUE.equals(req.get("disconnectOnFinish"));
 
         try {
             Flow flow = FlowRegistry.get(flowName);
@@ -299,6 +300,14 @@ public final class HttpApi {
                     state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 } finally {
                     Progress.clear();
+                    // Opt-in: closes the session no matter how the run ended (pass, fail, or even
+                    // a run-level error) - for callers (CI, a data-driven .bat/.sh loop) that want
+                    // a clean disconnect every time without a suite having to end with its own
+                    // "disconnect" step. Off by default - a suite with no disconnect step should
+                    // leave its session exactly as the suite itself left it.
+                    if (disconnectOnFinish) {
+                        try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
+                    }
                 }
             }, "scenario-run-" + runId).start();
 

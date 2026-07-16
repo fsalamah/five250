@@ -253,11 +253,12 @@ public final class Cli {
         String session = opts.getOrDefault("session", "default");
         long timeoutSec = Long.parseLong(opts.getOrDefault("timeout", "300"));
         String dataCsv = opts.get("data-csv");
+        boolean disconnectOnFinish = opts.containsKey("disconnect-on-finish");
 
         ensureDaemonRunning();
 
         if (dataCsv == null) {
-            System.exit(runOnce(flow, file, session, timeoutSec, baseVars) ? 0 : 1);
+            System.exit(runOnce(flow, file, session, timeoutSec, baseVars, disconnectOnFinish) ? 0 : 1);
             return;
         }
 
@@ -272,7 +273,7 @@ public final class Cli {
             Map<String, String> rowVars = new LinkedHashMap<>(baseVars);
             rowVars.putAll(rows.get(i));
             System.err.println("=== row " + (i + 1) + "/" + rows.size() + " ===");
-            if (!runOnce(flow, file, session, timeoutSec, rowVars)) failed++;
+            if (!runOnce(flow, file, session, timeoutSec, rowVars, disconnectOnFinish)) failed++;
         }
         System.out.println();
         System.out.println((rows.size() - failed) + " / " + rows.size() + " row(s) passed");
@@ -281,12 +282,13 @@ public final class Cli {
 
     /** Runs one flow/file once against one variable set; returns whether every scenario in it passed. */
     @SuppressWarnings("unchecked")
-    private static boolean runOnce(String flow, String file, String session, long timeoutSec, Map<String, String> vars) throws Exception {
+    private static boolean runOnce(String flow, String file, String session, long timeoutSec, Map<String, String> vars, boolean disconnectOnFinish) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("flow", flow);
         body.put("file", file);
         body.put("sessionId", session);
         if (!vars.isEmpty()) body.put("vars", vars);
+        if (disconnectOnFinish) body.put("disconnectOnFinish", true);
 
         Map<String, Object> startJson = Json.parseObject(httpPost("/api/scenarios/run", Json.write(body)));
         if (!Boolean.TRUE.equals(startJson.get("ok"))) {

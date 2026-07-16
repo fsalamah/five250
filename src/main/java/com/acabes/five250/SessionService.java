@@ -38,6 +38,13 @@ public final class SessionService {
         sessions.remove(sessionId);
     }
 
+    /** Closes the socket AND deregisters the session, same as the "disconnect" RPC — for reuse by
+     * both that handler and HttpApi's optional "disconnect when the run finishes" run option. */
+    public void disconnect(String sessionId) {
+        Terminal t = sessions.remove(sessionId);
+        if (t != null) t.disconnect();
+    }
+
     public Map<String, String> sessionStatuses() {
         Map<String, String> out = new LinkedHashMap<>();
         for (Map.Entry<String, Terminal> e : sessions.entrySet()) {
@@ -218,8 +225,7 @@ public final class SessionService {
 
                 case "disconnect": {
                     String sid = sessionId(req);
-                    Terminal t = sessions.remove(sid);
-                    if (t != null) t.disconnect();
+                    disconnect(sid);
                     Map<String, Object> resp = ok(Map.of());
                     RecordingState rec = recordings.get(sid);
                     if (rec != null) {

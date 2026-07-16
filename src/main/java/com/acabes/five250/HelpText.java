@@ -146,7 +146,7 @@ public final class HelpText {
         ENTRIES.put("run-suite", new Entry(
             "Run a scenario CSV from the command line (e.g. from CI)",
             "five250 run-suite --flow <flow> --file <file> [--session <id>] [--var NAME=VALUE ...] "
-                + "[--data-csv <path>] [--timeout <sec>]",
+                + "[--data-csv <path>] [--disconnect-on-finish] [--timeout <sec>]",
             "Starts the run in the background daemon exactly like clicking Run All in the GUI, "
                 + "then polls and prints each step as it executes, followed by PASS/FAIL and a "
                 + "summary. Exits 0 if every scenario passed, 1 if any failed, 2 on a run error, "
@@ -155,14 +155,19 @@ public final class HelpText {
                 + "repeat --var for multiple values. --data-csv runs the whole suite once per row "
                 + "of a CSV whose header names are ${NAME} variables (each row's values override "
                 + "--var/the saved .vars.csv for that run only) — this is what the auto-generated "
-                + "<file>.bat/<file>.sh next to a scenario invoke after every vars save.",
+                + "<file>.bat/<file>.sh next to a scenario invoke after every vars save. "
+                + "--disconnect-on-finish closes the session when the run ends, pass or fail (or "
+                + "even a run error) — same option as the GUI's \"Disconnect when done\" checkbox; "
+                + "off by default, so a suite with no disconnect step of its own leaves the session "
+                + "exactly as it left it.",
             List.of(
-                "--flow      Flow name, e.g. custom-steps",
-                "--file      Scenario file name (no .csv), e.g. self-contained-signon",
-                "--session   Session id to run against. Default 'default'",
-                "--var       NAME=VALUE, repeatable. Overrides that name's saved variable value",
-                "--data-csv  Path to a CSV of variable sets; runs once per row, aggregates PASS/FAIL",
-                "--timeout   Seconds to wait for the run to finish before giving up. Default 300"
+                "--flow                  Flow name, e.g. custom-steps",
+                "--file                  Scenario file name (no .csv), e.g. self-contained-signon",
+                "--session               Session id to run against. Default 'default'",
+                "--var                   NAME=VALUE, repeatable. Overrides that name's saved variable value",
+                "--data-csv              Path to a CSV of variable sets; runs once per row, aggregates PASS/FAIL",
+                "--disconnect-on-finish  Close the session when the run ends, regardless of PASS/FAIL",
+                "--timeout               Seconds to wait for the run to finish before giving up. Default 300"
             ),
             List.of(
                 "five250 run-suite --flow custom-steps --file self-contained-signon",
