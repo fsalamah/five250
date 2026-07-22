@@ -270,6 +270,22 @@
       </aside>
 
       <div class="filemain">
+        <div class="panel" id="runningPanel" style="display:none">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px">
+            <h2 style="margin:0">Running…</h2>
+            <span id="runningProgress" class="muted"></span>
+          </div>
+          <div id="runningCurrent" class="muted" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div id="runningScreen">(waiting for screen…)</div>
+          <div id="runningSteps" class="step-strip not-clickable"></div>
+        </div>
+
+        <div class="panel" id="resultsPanel" style="display:none">
+          <h2>Results</h2>
+          <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
+          <table id="resultsTable"><thead></thead><tbody></tbody></table>
+        </div>
+
         <div class="panel">
           <div class="row" style="justify-content:space-between">
             <h2 style="margin:0" id="currentFileTitle">No file selected</h2>
@@ -298,22 +314,6 @@
             </div>
           </div>
           <table id="varsTable"><thead></thead><tbody></tbody></table>
-        </div>
-
-        <div class="panel" id="runningPanel" style="display:none">
-          <div class="row" style="justify-content:space-between; margin-bottom:10px">
-            <h2 style="margin:0">Running…</h2>
-            <span id="runningProgress" class="muted"></span>
-          </div>
-          <div id="runningCurrent" class="muted" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
-          <div id="runningScreen">(waiting for screen…)</div>
-          <div id="runningSteps" class="step-strip not-clickable"></div>
-        </div>
-
-        <div class="panel" id="resultsPanel" style="display:none">
-          <h2>Results</h2>
-          <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
-          <table id="resultsTable"><thead></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
