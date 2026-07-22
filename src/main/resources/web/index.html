@@ -157,12 +157,18 @@
   @keyframes cursorBlink { 50% { background: transparent; color: inherit; } }
   #btnExitImmersive { position: fixed; top: 12px; right: 12px; z-index: 2000; background: var(--red); border-color: var(--red); color: white; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
 
-  .step-list { margin-top: 14px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
-  .step-row { padding: 6px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #1c2029; font-family: var(--mono); }
-  .step-row:last-child { border-bottom: none; }
-  .step-row:hover { background: #1e2330; }
-  .step-row.current { background: var(--accent); color: #05060a; font-weight: 600; }
-  .step-list.not-clickable .step-row { cursor: default; }
+  .step-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-height: 140px; overflow-y: auto; padding: 2px; }
+  .step-chip {
+    display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; font-size: 12px; cursor: pointer;
+    font-family: var(--mono); background: #1a1e29; border: 1px solid var(--border); border-radius: 20px;
+    max-width: 220px; transition: background .12s, border-color .12s;
+  }
+  .step-chip:hover { border-color: var(--accent-dim); background: #1e2330; }
+  .step-chip.current { background: var(--accent); color: #05060a; font-weight: 600; border-color: var(--accent); }
+  .step-chip .chip-num { font-weight: 700; opacity: .8; }
+  .step-chip.current .chip-num { opacity: 1; }
+  .step-chip .chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step-strip.not-clickable .step-chip { cursor: default; }
 
   #terminalScreenPanel { position: relative; }
   #btnSelectArea.active { background: var(--accent); border-color: var(--accent); color: white; }
@@ -295,11 +301,13 @@
         </div>
 
         <div class="panel" id="runningPanel" style="display:none">
-          <h2>Running…</h2>
-          <div id="runningProgress" class="muted" style="margin-bottom:8px"></div>
-          <div id="runningCurrent" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div class="row" style="justify-content:space-between; margin-bottom:10px">
+            <h2 style="margin:0">Running…</h2>
+            <span id="runningProgress" class="muted"></span>
+          </div>
+          <div id="runningCurrent" class="muted" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
           <div id="runningScreen">(waiting for screen…)</div>
-          <div id="runningSteps" class="step-list not-clickable"></div>
+          <div id="runningSteps" class="step-strip not-clickable"></div>
         </div>
 
         <div class="panel" id="resultsPanel" style="display:none">
@@ -328,7 +336,7 @@
       <span id="replayCounter" class="muted" style="min-width:80px; text-align:center"></span>
       <button id="replayNext">Next ▸</button>
     </div>
-    <div id="replaySteps" class="step-list"></div>
+    <div id="replaySteps" class="step-strip"></div>
   </div>
 </div>
 
@@ -1025,9 +1033,11 @@ function openReplay(steps, title) {
   replaySteps = steps;
   replayIndex = 0;
   $("replayTitle").textContent = title;
-  $("replaySteps").innerHTML = replaySteps.map((s, i) =>
-    `<div class="step-row" data-index="${i}">${i + 1}. ${escapeHtml(s.label || "(unlabeled step)")}</div>`).join("");
-  $("replaySteps").querySelectorAll(".step-row").forEach(div => {
+  $("replaySteps").innerHTML = replaySteps.map((s, i) => {
+    const label = s.label || "(unlabeled step)";
+    return `<div class="step-chip" data-index="${i}" title="${escapeHtml(label)}"><span class="chip-num">${i + 1}</span><span class="chip-label">${escapeHtml(label)}</span></div>`;
+  }).join("");
+  $("replaySteps").querySelectorAll(".step-chip").forEach(div => {
     div.addEventListener("click", () => { replayIndex = parseInt(div.dataset.index, 10); showReplayStep(); });
   });
   $("replayBackdrop").classList.add("show");
@@ -1041,7 +1051,7 @@ function showReplayStep() {
   $("replayCounter").textContent = (replayIndex + 1) + " / " + replaySteps.length;
   $("replayPrev").disabled = replayIndex === 0;
   $("replayNext").disabled = replayIndex === replaySteps.length - 1;
-  $("replaySteps").querySelectorAll(".step-row").forEach((div, i) => div.classList.toggle("current", i === replayIndex));
+  $("replaySteps").querySelectorAll(".step-chip").forEach((div, i) => div.classList.toggle("current", i === replayIndex));
   const cur = $("replaySteps").querySelector(".current");
   if (cur) cur.scrollIntoView({ block: "nearest" });
 }
@@ -1492,10 +1502,12 @@ $("btnRunScenarios").addEventListener("click", async () => {
   $("resultsPanel").style.display = "none";
   $("runningPanel").style.display = "block";
   $("runningScreen").style.display = $("headless").checked ? "none" : "block";
-  $("runningSteps").innerHTML = readScenarioTable().map((r, i) =>
-    `<div class="step-row" data-case="${escapeHtml(r.case || "")}" data-step="${escapeHtml(r.step || "")}">${i + 1}. `
-    + `${escapeHtml(r.case || "")} / step ${escapeHtml(r.step || "")}: ${escapeHtml(r.action || "")} `
-    + `${escapeHtml(r.target || "")} ${r.value ? "= " + escapeHtml(r.value) : ""}</div>`).join("");
+  $("runningSteps").innerHTML = readScenarioTable().map((r, i) => {
+    const full = `${r.case || ""} / step ${r.step || ""}: ${r.action || ""} ${r.target || ""} ${r.value ? "= " + r.value : ""}`.trim();
+    const short = `${r.action || ""} ${r.target || ""}`.trim() || full;
+    return `<div class="step-chip" data-case="${escapeHtml(r.case || "")}" data-step="${escapeHtml(r.step || "")}" title="${escapeHtml(full)}">`
+      + `<span class="chip-num">${i + 1}</span><span class="chip-label">${escapeHtml(short)}</span></div>`;
+  }).join("");
   pollRun(startJson.runId, sid, $("headless").checked);
 });
 
@@ -1520,7 +1532,7 @@ function pollRun(runId, sid, headless) {
     $("runningProgress").textContent = `${status.completed} / ${status.total} scenarios complete`;
     $("runningCurrent").textContent = status.current ? "▸ " + status.current : "";
     const cur = parseCurrentStep(status.current);
-    $("runningSteps").querySelectorAll(".step-row").forEach(div => {
+    $("runningSteps").querySelectorAll(".step-chip").forEach(div => {
       div.classList.toggle("current", !!cur && div.dataset.case === cur.case && div.dataset.step === cur.step);
     });
     const highlighted = $("runningSteps").querySelector(".current");
