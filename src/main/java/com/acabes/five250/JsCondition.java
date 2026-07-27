@@ -3,7 +3,6 @@ package com.acabes.five250;
 import org.openjdk.nashorn.api.scripting.ClassFilter;
 import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
-import javax.script.ScriptEngine;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,14 +21,17 @@ import java.util.concurrent.TimeoutException;
  * time it gets here - only values extracted DURING this same run (the "extract" action) need an
  * explicit binding, since those don't exist yet at substitution time.
  *
- * Sandboxed two ways, because suite CSVs are exactly the kind of file people share/paste from
+ * Sandboxed three ways, because suite CSVs are exactly the kind of file people share/paste from
  * elsewhere: (1) a ClassFilter that denies every Java class, so a condition can never reach
  * outside the sandbox (Java.type(...), filesystem, sockets, ...) - only pure ECMAScript is
  * reachable; (2) every evaluation runs on a pooled worker thread under a hard wall-clock timeout,
  * so a pathological expression (an accidental infinite loop inside the JS itself) fails the
- * scenario with a clear error instead of hanging the run. Nashorn can't always be interrupted
- * mid-script - see EXECUTOR below - so a truly stuck expression leaks one worker thread rather
- * than actually stopping; an accepted trade-off for a lightweight embedded sandbox.
+ * scenario with a clear error instead of hanging the run - Nashorn can't always be interrupted
+ * mid-script, so a truly stuck expression leaks one worker thread rather than actually stopping,
+ * an accepted trade-off for a lightweight embedded sandbox; (3) a brand new engine every call,
+ * never cached or reused - a bare "var"/implicit global in one condition must never be visible to
+ * the next evaluation, whether that's the next "if" in the same case or a completely unrelated
+ * suite run that happens to reuse the same pooled thread.
  */
 final class JsCondition {
 
@@ -46,12 +48,6 @@ final class JsCondition {
         return th;
     });
 
-    // One Nashorn engine per worker thread, reused across evaluations on that thread - engine
-    // creation isn't free, and each worker only ever runs one eval at a time (never shared
-    // concurrently), so this is safe.
-    private static final ThreadLocal<ScriptEngine> ENGINE =
-        ThreadLocal.withInitial(() -> FACTORY.getScriptEngine(DENY_ALL_CLASSES));
-
     private JsCondition() {}
 
     static boolean evaluate(String expression, Map<String, Object> extracted) {
@@ -64,7 +60,14 @@ final class JsCondition {
         // ambiguity about what bracket/dot access on a raw java.util.Map actually does.
         String script = "var extracted = " + Json.write(coerce(extracted)) + ";\n(" + expression + ")";
 
-        Future<Object> future = EXECUTOR.submit(() -> ENGINE.get().eval(script));
+        // A brand new engine every call, never cached/reused - each evaluation gets a genuinely
+        // fresh global scope. Reusing one engine (even per-thread) let a bare "var"/implicit
+        // global in one condition silently leak into the NEXT evaluation on that same reused
+        // pooled thread - including across unrelated cases or entirely unrelated suite runs, once
+        // the shared executor recycled a thread. That's the opposite of what a sandboxed,
+        // supposedly-independent condition evaluator should guarantee, so correctness wins over
+        // the (modest) engine-creation cost here.
+        Future<Object> future = EXECUTOR.submit(() -> FACTORY.getScriptEngine(DENY_ALL_CLASSES).eval(script));
         Object result;
         try {
             result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
