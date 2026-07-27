@@ -163,14 +163,48 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    a completely cold, zero-sessions daemon state, verified live. Careful:
    re-running an unconditional-signon suite on an *already* signed-on
    session will fail (the sign-on fields won't exist wherever it lands) —
-   that's correct behavior, not a bug, given there's no branching yet.
+   that's correct behavior, not a bug: `connect` only ever runs once, before
+   the suite starts, regardless of `if`/`loop` branching inside the suite
+   itself.
 
    `wait` (value = seconds, 0-120 capped) is a deliberate, opt-in exception
    to "never sleep" — use it only for delays outside the 5250 buffer
    (a batch job finishing) that `waitReady()`'s keyboard/buffer-stability
    polling can't detect. See `scenarios/custom-steps/wait-test.csv`.
 
-2. **A new `Flow` class, for anything conditional** — write a `Flow`
+   **`if`/`else`/`endif` and `loop`/`endloop`** give a case real control
+   flow. `if`'s `target` is a JS boolean expression, e.g.
+   `extracted.balance > 100 && extracted.status == "ACTIVE"`. `${NAME}` vars
+   are already resolved to literal text before a step reaches the
+   interpreter, so a condition referencing a saved variable is just plain JS
+   by the time it's evaluated (`${BALANCE} > 100` becomes, after
+   substitution, `350 > 100`) — no extra binding needed. Only
+   `extracted.<name>` needs one, since a value an earlier `extract` step in
+   *this same case* pulled off the screen doesn't exist yet at substitution
+   time; numeric-looking extracted strings are auto-coerced to real JS
+   numbers first (`"9" > "10"` is `true` as a string compare, `false` as a
+   number — 5250 screen data is always text, so this matters for every
+   numeric condition). `loop`'s `target` picks the mode: `while` (its
+   `value` is a JS condition, re-evaluated every time control returns via
+   `endloop` — e.g. page a subfile with PAGE_DOWN, extract a "more"
+   indicator, `loop while extracted.more == true`) or `count` (its `value`
+   is an exact iteration count, capped at 500). Blocks may nest; an
+   unmatched or mismatched marker (`endif` with no `if`, etc.) is caught
+   before the case runs at all, not as a mid-run jump bug. Every step
+   actually executed — including repeated loop-body visits — counts against
+   a 2000-visit-per-case safety cap, so a condition that's always true fails
+   the scenario with a clear error instead of hanging the run.
+
+   The JS itself runs in `JsCondition` — a sandboxed, standalone-Nashorn
+   engine (no GraalJS: a lighter dependency fits a self-contained single-jar
+   tool better). Sandboxed because suite CSVs are exactly the kind of file
+   people share/paste from elsewhere: a `ClassFilter` denies every Java
+   class (no `Java.type(...)`, filesystem, sockets — pure ECMAScript only),
+   and every evaluation runs under a 1-second wall-clock timeout on a pooled
+   worker thread, so a pathological expression fails fast instead of
+   hanging. See `scenarios/custom-steps/` for worked if/loop examples.
+
+2. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
    implementation (see `RunCommandFlow.java` for the per-row pattern, or
    `GenericStepFlow.java` for the grouped/multi-step + include pattern),
    register it in `FlowRegistry`, rebuild. The CSV columns come from
