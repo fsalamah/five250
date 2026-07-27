@@ -1,0 +1,22 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+main,1,include,signon-common,,
+main,2,type,"20,7",WRKACTJOB,
+main,3,key,,ENTER,
+main,4,extract,row:1,title,
+main,5,if,extracted.title.indexOf('Active Jobs') >= 0,,
+main,6,check,row:1,,Active Jobs
+main,7,else,,,
+main,8,check,message,,unexpected screen after WRKACTJOB
+main,9,endif,,,
+main,10,extract,row:2,startTime,
+main,11,loop,while,typeof extracted.curTime === 'undefined' || extracted.curTime === extracted.startTime,
+main,12,wait,,1,
+main,13,key,,F5,
+main,14,extract,row:2,curTime,
+main,15,endloop,,,
+main,16,loop,count,2,
+main,17,key,,F5,
+main,18,endloop,,,
+main,19,check,row:1,,Active Jobs
+main,20,key,,F3,

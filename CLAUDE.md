@@ -202,7 +202,11 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    class (no `Java.type(...)`, filesystem, sockets — pure ECMAScript only),
    and every evaluation runs under a 1-second wall-clock timeout on a pooled
    worker thread, so a pathological expression fails fast instead of
-   hanging. See `scenarios/custom-steps/` for worked if/loop examples.
+   hanging. See `scenarios/custom-steps/if-loop-demo.csv` for a worked
+   example — self-contained (its own `connect` + `include signon-common`, so
+   it opens and runs cleanly in the GUI from a cold session), demonstrating
+   `if`/`else` on an extracted title, `loop while` (a real screen value
+   naturally converging), and `loop count`.
 
 2. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
    implementation (see `RunCommandFlow.java` for the per-row pattern, or
