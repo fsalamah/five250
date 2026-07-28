@@ -195,11 +195,26 @@ public final class HttpApi {
             case "PUT": {
                 List<Map<String, String>> rows = toStringRows(Json.parse(readBody(ex)));
                 Csv.write(file, FlowRegistry.get(flowName).csvColumns(), rows);
+                regenerateDeclaration(flowName, fileName);
                 sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                 return;
             }
             default:
                 sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
+        }
+    }
+
+    /** Re-derives "<file>.d.ts" from whatever's on disk right now (steps CSV + vars) - called
+     * after every save of either, so a JS orchestrator's autocomplete never drifts from the
+     * suite it actually describes. Best-effort: TypeDeclarations.write() itself swallows I/O
+     * failures rather than let a stale/missing .d.ts fail an actual save. */
+    private void regenerateDeclaration(String flowName, String fileName) {
+        try {
+            List<Map<String, String>> rows = Csv.read(scenarioFile(flowName, fileName));
+            Map<String, String> vars = Variables.load(varsFile(flowName, fileName));
+            TypeDeclarations.write(flowDir(flowName), fileName, rows, vars);
+        } catch (Throwable ignored) {
+            // quality-of-life only
         }
     }
 
@@ -227,6 +242,7 @@ public final class HttpApi {
                         if (name != null && !name.isBlank()) vars.put(name.trim(), row.getOrDefault("value", ""));
                     }
                     DataDrivenRunner.onVarsSaved(flowDir(flowName), flowName, fileName, vars);
+                    regenerateDeclaration(flowName, fileName);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                     return;
                 }
@@ -268,6 +284,7 @@ public final class HttpApi {
                     }
                     List<Map<String, String>> rows = toStringRows(body.get("rows"));
                     DataDrivenRunner.saveGrid(flowDir(flowName), varsFile(flowName, fileName), flowName, fileName, columns, rows);
+                    regenerateDeclaration(flowName, fileName);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                     return;
                 }

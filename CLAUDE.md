@@ -249,6 +249,21 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    one back after an `extract`, and uses a real JS `for` loop calling
    `execute()` repeatedly — the JS-native analog of `loop count`.
 
+   **VSCode autocomplete for `.js` orchestrators**: every steps-table save
+   (`PUT /api/scenarios`) and every Variables/data-grid save (`PUT
+   /api/scenario-data`, `PUT /api/scenario-vars`) regenerates
+   `<file>.d.ts` next to the suite (`TypeDeclarations.java`) — an ambient
+   TypeScript declaration for `execute()` and the suite's own global, with
+   `.vars` keyed by every variable name currently known for that suite
+   (its vars/data grid, every `${NAME}` placeholder actually referenced in a
+   cell, and every `extract` step's output name), not just a generic
+   string-indexed object. Written even for suites with no `.js` file yet —
+   costs nothing and means the types are already waiting the moment you add
+   one. VSCode's plain-JS "implicit project" mode picks up a `.d.ts` sitting
+   next to a `.js` file automatically, no `jsconfig.json` needed. Hand edits
+   to a `.d.ts` are overwritten on the next save — it's generated, not
+   authored.
+
 3. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
    implementation (see `RunCommandFlow.java` for the per-row pattern, or
    `GenericStepFlow.java` for the grouped/multi-step + include pattern),

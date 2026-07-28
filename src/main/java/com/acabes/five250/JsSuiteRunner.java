@@ -247,7 +247,9 @@ final class JsSuiteRunner {
     /** The suite's base filename becomes the script's global variable name, so it must be a
      * valid JS identifier - non-identifier characters (a suite named with hyphens, spaces, ...)
      * are replaced with underscores, and a leading digit gets an underscore prefix. */
-    private static String sanitizeIdentifier(String name) {
+    /** Package-visible so TypeDeclarations can derive the exact same global name its generated
+     * ".d.ts" declares - the two must never disagree about what a suite's binding is called. */
+    static String sanitizeIdentifier(String name) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
