@@ -1,7 +1,8 @@
 package com.acabes.five250;
 
-import org.openjdk.nashorn.api.scripting.ClassFilter;
-import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.HostAccess;
+import org.graalvm.polyglot.Value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,26 +23,21 @@ import java.util.concurrent.TimeoutException;
  * explicit binding, since those don't exist yet at substitution time.
  *
  * Sandboxed three ways, because suite CSVs are exactly the kind of file people share/paste from
- * elsewhere: (1) a ClassFilter that denies every Java class, so a condition can never reach
- * outside the sandbox (Java.type(...), filesystem, sockets, ...) - only pure ECMAScript is
- * reachable; (2) every evaluation runs on a pooled worker thread under a hard wall-clock timeout,
- * so a pathological expression (an accidental infinite loop inside the JS itself) fails the
- * scenario with a clear error instead of hanging the run - Nashorn can't always be interrupted
- * mid-script, so a truly stuck expression leaks one worker thread rather than actually stopping,
- * an accepted trade-off for a lightweight embedded sandbox; (3) a brand new engine every call,
- * never cached or reused - a bare "var"/implicit global in one condition must never be visible to
- * the next evaluation, whether that's the next "if" in the same case or a completely unrelated
- * suite run that happens to reuse the same pooled thread.
+ * elsewhere: (1) no host access at all (HostAccess.NONE) plus a denied class lookup, so a
+ * condition can never reach outside the sandbox (Java.type(...), filesystem, sockets, ...) - only
+ * pure ECMAScript is reachable; (2) every evaluation runs on a pooled worker thread under a hard
+ * wall-clock timeout, with the CALLING thread force-cancelling the Context (Context.close(true))
+ * on timeout - unlike the Nashorn engine used here previously, GraalJS genuinely honors
+ * cross-thread cancellation of a running script, verified empirically (an infinite
+ * "while(true){}" condition is actually stopped, not just abandoned); (3) a brand new Context
+ * every call, never cached or reused - a bare "var"/implicit global in one condition must never
+ * be visible to the next evaluation, whether that's the next "if" in the same case or a
+ * completely unrelated suite run that happens to reuse the same pooled thread.
  */
 final class JsCondition {
 
-    private static final NashornScriptEngineFactory FACTORY = new NashornScriptEngineFactory();
-    private static final ClassFilter DENY_ALL_CLASSES = className -> false;
     private static final long TIMEOUT_MS = 1000;
 
-    // Cached-thread-pool + daemon threads: a hung evaluation leaks its worker thread (Nashorn
-    // doesn't reliably honor Thread.interrupt() mid-script) rather than blocking the pool, and
-    // daemon threads never stop the JVM from exiting.
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
         Thread th = new Thread(r, "js-condition");
         th.setDaemon(true);
@@ -56,32 +52,42 @@ final class JsCondition {
         }
         // The "extracted" object is inlined as real JS source (via a JSON literal), not bound
         // through Java-object bridging - that guarantees native dot-access semantics
-        // (extracted.balance) regardless of Nashorn's Map-bridging quirks, and sidesteps any
-        // ambiguity about what bracket/dot access on a raw java.util.Map actually does.
+        // (extracted.balance) regardless of engine-specific Map-bridging quirks, and sidesteps
+        // any ambiguity about what bracket/dot access on a raw java.util.Map actually does.
         String script = "var extracted = " + Json.write(coerce(extracted)) + ";\n(" + expression + ")";
 
-        // A brand new engine every call, never cached/reused - each evaluation gets a genuinely
-        // fresh global scope. Reusing one engine (even per-thread) let a bare "var"/implicit
-        // global in one condition silently leak into the NEXT evaluation on that same reused
-        // pooled thread - including across unrelated cases or entirely unrelated suite runs, once
-        // the shared executor recycled a thread. That's the opposite of what a sandboxed,
-        // supposedly-independent condition evaluator should guarantee, so correctness wins over
-        // the (modest) engine-creation cost here.
-        Future<Object> future = EXECUTOR.submit(() -> FACTORY.getScriptEngine(DENY_ALL_CLASSES).eval(script));
-        Object result;
+        // Context is BUILT here (on the calling thread, so it's reachable for a cross-thread
+        // close(true) below) but only ever EVALUATED on the single executor thread that runs it -
+        // GraalJS restricts a Context to one thread at a time, not to whichever thread built it.
+        Context context = Context.newBuilder("js")
+            .allowHostAccess(HostAccess.NONE)
+            .allowHostClassLookup(name -> false)
+            .option("engine.WarnInterpreterOnly", "false")
+            .build();
+
+        Future<Value> future = EXECUTOR.submit(() -> context.eval("js", script));
         try {
-            result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            throw new RuntimeException("condition timed out after " + TIMEOUT_MS + "ms: " + expression);
-        } catch (Exception e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            throw new RuntimeException("condition failed to evaluate (" + cause.getMessage() + "): " + expression);
+            Value result;
+            try {
+                result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                context.close(true); // real cross-thread cancellation, not just abandonment
+                throw new RuntimeException("condition timed out after " + TIMEOUT_MS + "ms: " + expression);
+            } catch (Exception e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                throw new RuntimeException("condition failed to evaluate (" + cause.getMessage() + "): " + expression);
+            }
+            if (!result.isBoolean()) {
+                throw new RuntimeException("condition must evaluate to true/false, got '" + result + "' for: " + expression);
+            }
+            return result.asBoolean();
+        } finally {
+            try {
+                context.close();
+            } catch (Exception ignored) {
+                // already closed via the timeout branch above, or nothing left to clean up
+            }
         }
-        if (!(result instanceof Boolean)) {
-            throw new RuntimeException("condition must evaluate to true/false, got '" + result + "' for: " + expression);
-        }
-        return (Boolean) result;
     }
 
     /** Auto-coerces any value that parses cleanly as a number into a real number before it's

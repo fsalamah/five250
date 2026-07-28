@@ -295,8 +295,7 @@ public final class HttpApi {
         try {
             Flow flow = FlowRegistry.get(flowName);
             File csvFile = scenarioFile(flowName, fileName);
-            List<Map<String, String>> rows = Csv.read(csvFile);
-            rows = flow.preprocess(flowDir(flowName), rows); // splice in any "include" steps
+            List<Map<String, String>> rawRows = Csv.read(csvFile);
             Map<String, String> vars = new LinkedHashMap<>(Variables.load(varsFile(flowName, fileName)));
             Object varsOverride = req.get("vars"); // CLI/API caller can supply/override ${NAME} values externally
             if (varsOverride instanceof Map) {
@@ -304,6 +303,14 @@ public final class HttpApi {
                     vars.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
                 }
             }
+
+            File jsFile = new File(flowDir(flowName), fileName + ".js");
+            if (jsFile.exists()) {
+                runJsSuite(ex, flowName, fileName, sessionId, disconnectOnFinish, rawRows, vars, jsFile);
+                return;
+            }
+
+            List<Map<String, String>> rows = flow.preprocess(flowDir(flowName), rawRows); // splice in any "include" steps
             rows = Variables.substituteRows(rows, vars); // resolve ${NAME} in every cell
 
             rows = autoConnectIfNeeded(sessionId, rows); // suite can create its own session via a "connect" step
@@ -319,23 +326,7 @@ public final class HttpApi {
                 try {
                     List<ScenarioResult> results = ScenarioRunner.run(flow, t, finalRows,
                         r -> { state.results.add(r.toMap()); state.current = ""; });
-
-                    // Every run gets its own timestamped copy so successive runs never clobber
-                    // each other's history; a fixed-name "latest" copy is kept alongside purely
-                    // for convenience (grep/tail without hunting for the newest timestamp) and
-                    // because /api/scenarios/replay's simple flow/file/index query resolves
-                    // against the untimestamped replay path.
-                    String ts = LocalDateTime.now().format(RUN_TIMESTAMP);
-                    File resultsDir = new File(RESULTS_DIR, flowName);
-                    File extractedDir = new File(EXTRACTED_DIR, flowName);
-                    ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results.csv"), results);
-                    ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results." + ts + ".csv"), results);
-                    ScenarioRunner.writeFailureDumps(new File(new File(FAILURES_DIR, flowName), fileName), results);
-                    ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
-                    ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
-                    ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
-                    ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
-                    ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
+                    writeRunArtifacts(flowName, fileName, results);
                     state.status = "done";
                 } catch (Throwable e) {
                     state.status = "error";
@@ -357,6 +348,68 @@ public final class HttpApi {
         } catch (Throwable e) {
             sendJson(ex, 200, SessionService.errorResponse(e));
         }
+    }
+
+    /**
+     * A suite with a sibling {@code <file>.js} is driven by that script instead of
+     * GenericStepFlow walking every case automatically - see JsSuiteRunner. Deliberately uses
+     * rawRows (no include-expansion, no early ${NAME} substitution) as the addressing source for
+     * {@code suiteX.steps(a, b)}, so row numbers match exactly what's in the CSV file/GUI table;
+     * substitution happens fresh per execute() call instead, against whatever the script has put
+     * in suiteX.vars by that point. Still honors a "connect" case for the same cold-start
+     * convenience as a plain CSV suite - only the returned (stripped) row list is discarded, since
+     * addressing must stay anchored to the file's real row numbers.
+     */
+    private void runJsSuite(HttpExchange ex, String flowName, String fileName, String sessionId,
+                             boolean disconnectOnFinish, List<Map<String, String>> rawRows,
+                             Map<String, String> vars, File jsFile) throws IOException {
+        autoConnectIfNeeded(sessionId, rawRows);
+        Terminal t = sessionService.getSession(sessionId);
+        String jsSource = java.nio.file.Files.readString(jsFile.toPath());
+
+        String runId = runTracker.start(1);
+        RunTracker.RunState state = runTracker.get(runId);
+
+        new Thread(() -> {
+            Progress.set(desc -> state.current = desc);
+            try {
+                ScenarioResult r = JsSuiteRunner.run(t, fileName, rawRows, vars, jsSource);
+                state.results.add(r.toMap());
+                state.current = "";
+                writeRunArtifacts(flowName, fileName, List.of(r));
+                state.status = "done";
+            } catch (Throwable e) {
+                state.status = "error";
+                state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            } finally {
+                Progress.clear();
+                if (disconnectOnFinish) {
+                    try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
+                }
+            }
+        }, "scenario-run-" + runId).start();
+
+        sendJson(ex, 200, Map.of("ok", true, "runId", runId, "total", 1));
+    }
+
+    /** Every run gets its own timestamped copy so successive runs never clobber each other's
+     * history; a fixed-name "latest" copy is kept alongside purely for convenience (grep/tail
+     * without hunting for the newest timestamp) and because /api/scenarios/replay's simple
+     * flow/file/index query resolves against the untimestamped replay path. Shared by both the
+     * normal CSV run path and the JS-orchestrated one - a JS suite's single accumulated
+     * ScenarioResult writes out exactly like any other run's result list. */
+    private void writeRunArtifacts(String flowName, String fileName, List<ScenarioResult> results) throws IOException {
+        String ts = LocalDateTime.now().format(RUN_TIMESTAMP);
+        File resultsDir = new File(RESULTS_DIR, flowName);
+        File extractedDir = new File(EXTRACTED_DIR, flowName);
+        ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results.csv"), results);
+        ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results." + ts + ".csv"), results);
+        ScenarioRunner.writeFailureDumps(new File(new File(FAILURES_DIR, flowName), fileName), results);
+        ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
+        ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
+        ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
+        ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
+        ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
     }
 
     /**

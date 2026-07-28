@@ -114,7 +114,7 @@ target/five250.jar connect ...` call brings both up). Two tabs:
   session is actually connected and refuses with a clear message instead of
   a raw "no session" error if not.
 
-### Two ways to add automation
+### Three ways to add automation
 
 1. **Pure CSV, no code (`custom-steps` flow)** — this is the one to reach for
    first. Each scenario is a group of rows sharing a `case` id, executed in
@@ -208,7 +208,48 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    `if`/`else` on an extracted title, `loop while` (a real screen value
    naturally converging), and `loop count`.
 
-2. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
+2. **`<file>.js` driving `<file>.csv`, for real JS control flow instead of the
+   `if`/`loop` mini-language** — a suite with a sibling `.js` file is driven
+   entirely by that script (`JsSuiteRunner`) instead of `GenericStepFlow`
+   walking every case automatically. The script gets a global object named
+   after the suite's base filename (non-identifier characters like `-`
+   sanitized to `_`) exposing:
+   - `.vars` — a live, two-way bound object over the SAME map `${NAME}`
+     substitution reads from. `suiteX.vars.username = 'abc'` before an
+     `execute()` call feeds that value into substitution for that call; an
+     `extract` step inside an executed range writes its result back into
+     this same map (`StepActions.executeAction`), so
+     `console.log(suiteX.vars.transactionAmount)` right after reads it back.
+     Unlike plain CSV, substitution is NOT one-shot up front for these suites
+     — it happens fresh on every `execute()` call, against whatever's
+     currently in `.vars`.
+   - `.steps(a, b)` — a range over the suite's rows, addressed by absolute
+     1-based row position in the file (matching what you see in the CSV/GUI
+     table directly), not by `case`/`step` column values.
+   - a global `execute(range)` function that runs that range against the
+     live terminal right now, in order.
+
+   This means real `for`/`while`/functions/`try`/`throw` sequencing recorded
+   step-ranges, instead of learning `if`/`else`/`endif`/`loop`/`endloop`.
+   Sandboxed with `HostAccess.EXPLICIT` (only the bound suite object/
+   `execute`/`console` are reachable, no arbitrary Java classes) rather than
+   `JsCondition`'s full no-host-access sandbox, since the script has to call
+   back into Java to drive the terminal at all — a deliberately bigger bridge
+   for a deliberately more powerful authoring mode. A whole-script wall-clock
+   timeout (5 minutes) is enforced by force-cancelling the GraalJS `Context`
+   from the calling thread (`context.close(true)`) if exceeded — verified to
+   actually stop a running script, not just abandon it.
+
+   Limitation: `include`/`connect` rows aren't executable via `execute()`
+   (they're resolved by the surrounding pipeline before a JS-orchestrated run
+   ever starts, same as for plain CSV) — a `connect` case still runs
+   automatically for the same cold-start convenience, just don't reference
+   its row from the script. See `scenarios/custom-steps/js_orchestrator_demo.js`
+   for a worked example: self-contained, sets a var before `execute()`, reads
+   one back after an `extract`, and uses a real JS `for` loop calling
+   `execute()` repeatedly — the JS-native analog of `loop count`.
+
+3. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
    implementation (see `RunCommandFlow.java` for the per-row pattern, or
    `GenericStepFlow.java` for the grouped/multi-step + include pattern),
    register it in `FlowRegistry`, rebuild. The CSV columns come from

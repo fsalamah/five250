@@ -24,13 +24,21 @@
       <artifactId>tn5250j</artifactId>
       <version>0.8.0-beta2</version>
     </dependency>
-    <!-- Standalone Nashorn (the maintained post-JDK-15 artifact) - embeds JS for the "if"/"loop"
-         condition evaluator (see JsCondition.java). Chosen over GraalJS: a few MB, not tens, which
-         matters for a tool whose whole pitch is a self-contained single jar. -->
+    <!-- GraalJS - embeds JS for both the "if"/"loop" condition evaluator (JsCondition.java) and
+         the JS-orchestrated suite runner (JsSuiteRunner.java). Needed for real Context.close(true)
+         cancellation and fine-grained HostAccess control that the execute()-bridge requires;
+         Nashorn (used here previously, for the narrower condition-only feature) can't do either,
+         so there's no reason to also keep it around as a second JS engine in the jar. -->
     <dependency>
-      <groupId>org.openjdk.nashorn</groupId>
-      <artifactId>nashorn-core</artifactId>
-      <version>15.4</version>
+      <groupId>org.graalvm.polyglot</groupId>
+      <artifactId>polyglot</artifactId>
+      <version>24.1.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.graalvm.polyglot</groupId>
+      <artifactId>js</artifactId>
+      <version>24.1.1</version>
+      <type>pom</type>
     </dependency>
   </dependencies>
 
