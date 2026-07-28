@@ -20,29 +20,70 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 6px; border: 2px solid var(--bg); }
   ::-webkit-scrollbar-thumb:hover { background: #384155; }
-  header {
-    display: flex; align-items: center; gap: 16px; padding: 11px 20px;
+  /* ---------- VSCode-style shell: titlebar / activity-bar / sidebar / main-content / bottom-panel / status-bar ---------- */
+  html, body { height: 100%; }
+  .app-shell { display: flex; flex-direction: column; height: 100vh; }
+  .titlebar {
+    display: flex; align-items: center; gap: 16px; padding: 9px 16px; flex: 0 0 auto;
     background: linear-gradient(180deg, #191d28, #14171f); border-bottom: 1px solid var(--border);
-    box-shadow: var(--shadow-1); position: sticky; top: 0; z-index: 50;
+    box-shadow: var(--shadow-1); z-index: 50;
   }
-  header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: .02em; color: #f0f2f7; }
-  header h1::before { content: "▣ "; color: var(--accent); }
-  header .tabs { display: flex; gap: 2px; margin-left: 20px; background: #0f1219; border: 1px solid var(--border-soft); border-radius: 8px; padding: 3px; }
-  header button.tab {
-    background: none; border: none; color: var(--muted); padding: 7px 16px; cursor: pointer;
-    border-radius: 6px; font-size: 13px; font-weight: 500; transition: background .15s, color .15s;
+  .titlebar h1 { font-size: 14px; margin: 0; font-weight: 700; letter-spacing: .02em; color: #f0f2f7; }
+  .titlebar h1::before { content: "▣ "; color: var(--accent); }
+  .shell-body { flex: 1 1 auto; display: flex; min-height: 0; }
+  .activity-bar {
+    flex: 0 0 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
+    background: #0e1016; border-right: 1px solid var(--border-soft);
   }
-  header button.tab:hover { color: var(--text); }
-  header button.tab.active { background: var(--accent); color: white; box-shadow: var(--shadow-1); }
-  header .status {
-    margin-left: auto; font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 20px;
-    background: #1c2029; border: 1px solid var(--border-soft);
+  .activity-bar button.tab {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px;
+    border-radius: 6px; padding: 0; transition: background .15s, color .15s;
+    border-left: 2px solid transparent;
   }
-  header .status.connected { color: var(--green); border-color: #1e3d2c; background: #10241a; }
-  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
-  section.view { display: none; }
-  section.view.active { display: block; animation: viewIn .12s ease-out; }
+  .activity-bar button.tab:hover { color: var(--text); background: #1a1e29; }
+  .activity-bar button.tab.active { color: var(--accent); background: #1a2333; border-left-color: var(--accent); }
+  .sidebar {
+    flex: 0 0 250px; overflow-y: auto; padding: 14px 12px; background: #12141c;
+    border-right: 1px solid var(--border-soft);
+  }
+  .sidebar h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+  .main-content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  section.view { display: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 20px; }
+  section.view.active { display: flex; flex-direction: column; animation: viewIn .12s ease-out; }
+  #view-scenarios.active { display: flex; }
   @keyframes viewIn { from { opacity: 0; } to { opacity: 1; } }
+  .editor-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .editor-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 10px 0 14px; }
+  button.editor-tab {
+    background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+    padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 0;
+  }
+  button.editor-tab:hover { color: var(--text); }
+  button.editor-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .editor-tab-content { display: none; }
+  .editor-tab-content.active { display: block; }
+  .bottom-panel { flex: 0 0 auto; max-height: 32vh; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--panel); }
+  .bottom-panel.collapsed .bp-body { display: none; }
+  .bottom-panel-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 10px 0; flex: 0 0 auto; }
+  button.bp-tab {
+    background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+    padding: 6px 12px; cursor: pointer; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  }
+  button.bp-tab:hover { color: var(--text); }
+  button.bp-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .bp-collapse { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px 8px; font-size: 13px; }
+  .bp-collapse:hover { color: var(--text); }
+  .bp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+  .bp-content { display: none; }
+  .bp-content.active { display: block; }
+  .status-bar {
+    flex: 0 0 24px; display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 12px;
+    background: #0e1016; border-top: 1px solid var(--border-soft); color: var(--muted);
+  }
+  .status-bar .status { color: var(--muted); }
+  .status-bar .status.connected { color: var(--green); }
+  .status-bar .status::before { content: "●  "; }
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-1);
@@ -93,10 +134,7 @@
   }
   .toast.show { opacity: 1; transform: translateY(0); }
 
-  .project { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
-  .filelist { position: sticky; top: 16px; }
-  .filemain { min-width: 0; }
-  #fileList { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+  #fileList { display: flex; flex-direction: column; gap: 2px; }
   .file-item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .12s; border: 1px solid transparent; }
   .file-item:hover { background: #1e2330; }
   .file-item.active { background: #1d2c45; border-color: var(--accent-dim); }
@@ -148,11 +186,14 @@
     padding: 0; margin: 0; border-radius: 2px; caret-color: #eafff0;
   }
   #btnImmersive.active { background: var(--accent); border-color: var(--accent); color: white; }
-  body.immersive header .tabs, body.immersive header h1, body.immersive .panel:not(#terminalScreenPanel) { display: none; }
-  body.immersive main { max-width: none; padding: 8px; }
+  /* !important: the sidebar's shown/hidden state is also toggled via inline style.display by the
+     activity-bar switch logic - a stylesheet rule alone would lose to that inline style. */
+  body.immersive .titlebar h1, body.immersive .activity-bar, body.immersive .sidebar,
+  body.immersive .status-bar, body.immersive .panel:not(#terminalScreenPanel) { display: none !important; }
+  body.immersive section.view { padding: 8px; }
   body.immersive #terminalScreenPanel { margin-bottom: 0; }
   body.immersive #screen { font-size: 16px; min-height: 70vh; }
-  body.immersive header { padding: 6px 12px; }
+  body.immersive .titlebar { padding: 6px 12px; }
   .cursor-block { background: rgba(110,224,110,.85); color: #05060a; animation: cursorBlink 1s step-end infinite; }
   @keyframes cursorBlink { 50% { background: transparent; color: inherit; } }
   #btnExitImmersive { position: fixed; top: 12px; right: 12px; z-index: 2000; background: var(--red); border-color: var(--red); color: white; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
@@ -183,16 +224,36 @@
 </head>
 <body>
 
-<header>
-  <h1>five250</h1>
-  <div class="tabs">
-    <button class="tab active" data-view="terminal">Terminal</button>
-    <button class="tab" data-view="scenarios">Scenarios</button>
+<div class="app-shell">
+  <div class="titlebar">
+    <h1>five250</h1>
   </div>
-  <div class="status" id="status">not connected</div>
-</header>
 
-<main>
+  <div class="shell-body">
+    <div class="activity-bar">
+      <button class="tab active" data-view="terminal" title="Terminal">⌨</button>
+      <button class="tab" data-view="scenarios" title="Scenarios">▤</button>
+    </div>
+
+    <aside class="sidebar" id="sidebarTerminal" style="display:none">
+      <h2>Terminal</h2>
+      <div class="muted">Connect and drive the live 5250 session in the main panel.</div>
+    </aside>
+
+    <aside class="sidebar" id="sidebarScenarios" style="display:none">
+      <div class="row" style="margin-bottom:6px">
+        <label>Flow</label><select id="flowSelect" style="flex:1"></select>
+      </div>
+      <div class="muted" id="flowDesc" style="margin-bottom:14px"></div>
+      <h2>Explorer</h2>
+      <div class="row" style="margin-bottom:8px">
+        <input id="newFileName" autocomplete="off" placeholder="new file name" style="flex:1">
+        <button class="primary small" id="btnNewFile">+ New</button>
+      </div>
+      <div id="fileList"></div>
+    </aside>
+
+    <div class="main-content">
 
   <section class="view active" id="view-terminal">
     <div class="panel">
@@ -254,84 +315,84 @@
   </section>
 
   <section class="view" id="view-scenarios">
-    <div class="row" style="margin-bottom:12px">
-      <label>Flow</label><select id="flowSelect" style="min-width:160px"></select>
-      <span class="muted" id="flowDesc"></span>
+    <div class="editor-area">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0" id="currentFileTitle">No file selected</h2>
+        <div class="row" style="margin:0">
+          <label>Run against session</label><input id="scenarioSession" autocomplete="off" value="default" style="width:90px">
+          <span id="sessionBadge" class="badge">checking…</span>
+          <label><input type="checkbox" id="headless"> Headless</label>
+          <label title="Close the session when the run ends, whether it passed or failed - regardless of whether the suite itself has its own disconnect step"><input type="checkbox" id="disconnectOnFinish"> Disconnect when done</label>
+          <button id="btnAddRow">+ Row</button>
+          <button id="btnSaveScenarios">Save</button>
+          <button class="primary" id="btnRunScenarios">Run All</button>
+          <button class="danger small" id="btnDeleteFile">Delete file</button>
+        </div>
+      </div>
+
+      <div class="editor-tabs">
+        <button class="editor-tab active" data-tab="steps">Steps</button>
+        <button class="editor-tab" data-tab="vars">Variables</button>
+        <button class="editor-tab" data-tab="script">Script</button>
+      </div>
+
+      <div class="editor-tab-content active" id="tabContentSteps">
+        <table id="scenarioTable"><thead></thead><tbody></tbody></table>
+        <div class="docs-panel" id="scenarioDocsPanel"><div class="docs-empty">Click a "command" cell and start typing for CL command suggestions and docs.</div></div>
+      </div>
+
+      <div class="editor-tab-content" id="tabContentVars">
+        <div class="row" style="justify-content:space-between; margin-bottom:10px">
+          <div class="muted" style="text-transform:none">use ${NAME} in any Steps cell above. Each row is one saved value set (same shape as &lt;file&gt;.data.csv, driving the generated .bat/.sh); the last row is what a plain Run All uses.</div>
+          <div class="row" style="margin:0">
+            <button class="small" id="btnAddVarCol">+ Variable</button>
+            <button class="small" id="btnAddVarRow">+ Row</button>
+            <button class="small" id="btnSaveVars">Save</button>
+          </div>
+        </div>
+        <table id="varsTable"><thead></thead><tbody></tbody></table>
+      </div>
+
+      <div class="editor-tab-content" id="tabContentScript">
+        <div class="row" style="justify-content:space-between; margin-bottom:10px">
+          <div class="muted" style="text-transform:none">optional &lt;file&gt;.js orchestrator (see JsSuiteRunner). Autocomplete is wired to this suite's own variables.</div>
+          <div class="row" style="margin:0">
+            <button class="small" id="btnAddScript" style="display:none">+ Add Script</button>
+            <button class="primary small" id="btnSaveScript" style="display:none">Save Script</button>
+          </div>
+        </div>
+        <div id="scriptEmptyHint" class="empty-hint">This suite has no .js orchestrator yet.</div>
+        <div id="scriptEditor" style="height:320px; border:1px solid var(--border); border-radius:7px; overflow:hidden; display:none;"></div>
+      </div>
     </div>
 
-    <div class="project">
-      <aside class="panel filelist">
-        <h2>Scenario files</h2>
-        <div class="row" style="margin-bottom:8px">
-          <input id="newFileName" autocomplete="off" placeholder="new file name" style="flex:1">
-          <button class="primary small" id="btnNewFile">+ New</button>
-        </div>
-        <div id="fileList"></div>
-      </aside>
-
-      <div class="filemain">
-        <div class="panel" id="runningPanel" style="display:none">
-          <div class="row" style="justify-content:space-between; margin-bottom:10px">
-            <h2 style="margin:0">Running…</h2>
-            <span id="runningProgress" class="muted"></span>
-          </div>
+    <div class="bottom-panel collapsed" id="bottomPanel">
+      <div class="bottom-panel-tabs">
+        <button class="bp-tab active" data-bp="running">Running <span id="runningProgress" class="muted"></span></button>
+        <button class="bp-tab" data-bp="results">Results</button>
+        <button class="bp-collapse" id="btnCollapseBottomPanel" title="Collapse/expand">▾</button>
+      </div>
+      <div class="bp-body">
+        <div class="bp-content active" id="bpContentRunning">
           <div id="runningCurrent" class="muted" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
           <div id="runningScreen">(waiting for screen…)</div>
           <div id="runningSteps" class="step-strip not-clickable"></div>
         </div>
-
-        <div class="panel" id="resultsPanel" style="display:none">
-          <h2>Results</h2>
+        <div class="bp-content" id="bpContentResults">
           <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
           <table id="resultsTable"><thead></thead><tbody></tbody></table>
-        </div>
-
-        <div class="panel">
-          <div class="row" style="justify-content:space-between">
-            <h2 style="margin:0" id="currentFileTitle">No file selected</h2>
-            <div class="row" style="margin:0">
-              <label>Run against session</label><input id="scenarioSession" autocomplete="off" value="default" style="width:90px">
-              <span id="sessionBadge" class="badge">checking…</span>
-              <label><input type="checkbox" id="headless"> Headless</label>
-              <label title="Close the session when the run ends, whether it passed or failed - regardless of whether the suite itself has its own disconnect step"><input type="checkbox" id="disconnectOnFinish"> Disconnect when done</label>
-              <button id="btnAddRow">+ Row</button>
-              <button id="btnSaveScenarios">Save</button>
-              <button class="primary" id="btnRunScenarios">Run All</button>
-              <button class="danger small" id="btnDeleteFile">Delete file</button>
-            </div>
-          </div>
-          <table id="scenarioTable"><thead></thead><tbody></tbody></table>
-          <div class="docs-panel" id="scenarioDocsPanel"><div class="docs-empty">Click a "command" cell and start typing for CL command suggestions and docs.</div></div>
-        </div>
-
-        <div class="panel">
-          <div class="row" style="justify-content:space-between; margin-bottom:0">
-            <h2 style="margin:0">Variables <span class="muted" style="text-transform:none;font-weight:normal">— use ${NAME} in any cell above. Each row is one saved value set (same shape as &lt;file&gt;.data.csv, driving the generated .bat/.sh); the last row is what a plain Run All uses.</span></h2>
-            <div class="row" style="margin:0">
-              <button class="small" id="btnAddVarCol">+ Variable</button>
-              <button class="small" id="btnAddVarRow">+ Row</button>
-              <button class="small" id="btnSaveVars">Save</button>
-            </div>
-          </div>
-          <table id="varsTable"><thead></thead><tbody></tbody></table>
-        </div>
-
-        <div class="panel" id="scriptPanel">
-          <div class="row" style="justify-content:space-between; margin-bottom:0">
-            <h2 style="margin:0">Script <span class="muted" style="text-transform:none;font-weight:normal">— optional &lt;file&gt;.js orchestrator (see JsSuiteRunner). Autocomplete is wired to this suite's own variables.</span></h2>
-            <div class="row" style="margin:0">
-              <button class="small" id="btnAddScript" style="display:none">+ Add Script</button>
-              <button class="primary small" id="btnSaveScript" style="display:none">Save Script</button>
-            </div>
-          </div>
-          <div id="scriptEmptyHint" class="empty-hint">This suite has no .js orchestrator yet.</div>
-          <div id="scriptEditor" style="height:320px; border:1px solid var(--border); border-radius:7px; overflow:hidden; display:none;"></div>
         </div>
       </div>
     </div>
   </section>
 
-</main>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status" id="status">not connected</span>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -562,13 +623,15 @@ function scenarioFilesForInclude() {
     .map(f => ({ name: f.name, description: f.rows + " row" + (f.rows === 1 ? "" : "s") }));
 }
 
-// ---------- tabs ----------
+// ---------- activity bar / views ----------
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", async () => {
     document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     btn.classList.add("active");
     $("view-" + btn.dataset.view).classList.add("active");
+    $("sidebarTerminal").style.display = btn.dataset.view === "terminal" ? "block" : "none";
+    $("sidebarScenarios").style.display = btn.dataset.view === "scenarios" ? "block" : "none";
     if (btn.dataset.view === "terminal") {
       await refreshHeaderStatus();
       if ($("status").classList.contains("connected")) {
@@ -577,6 +640,36 @@ document.querySelectorAll(".tab").forEach(btn => {
     }
   });
 });
+$("sidebar" + (document.querySelector(".tab.active").dataset.view === "terminal" ? "Terminal" : "Scenarios")).style.display = "block";
+
+// ---------- editor tabs (Steps / Variables / Script) ----------
+document.querySelectorAll(".editor-tab").forEach(btn => {
+  btn.addEventListener("click", () => showEditorTab(btn.dataset.tab));
+});
+function showEditorTab(name) {
+  document.querySelectorAll(".editor-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".editor-tab-content").forEach(c => {
+    c.classList.toggle("active", c.id === "tabContent" + name.charAt(0).toUpperCase() + name.slice(1));
+  });
+}
+
+// ---------- bottom panel (Running / Results) ----------
+document.querySelectorAll(".bp-tab").forEach(btn => {
+  btn.addEventListener("click", () => showBottomPanel(btn.dataset.bp));
+});
+$("btnCollapseBottomPanel").addEventListener("click", () => {
+  $("bottomPanel").classList.toggle("collapsed");
+});
+function showBottomPanel(tab) {
+  $("bottomPanel").classList.remove("collapsed");
+  document.querySelectorAll(".bp-tab").forEach(b => b.classList.toggle("active", b.dataset.bp === tab));
+  document.querySelectorAll(".bp-content").forEach(c => {
+    c.classList.toggle("active", c.id === "bpContent" + tab.charAt(0).toUpperCase() + tab.slice(1));
+  });
+}
+function hideBottomPanel() {
+  $("bottomPanel").classList.add("collapsed");
+}
 
 // ---------- rpc ----------
 async function rpc(cmd, extra) {
@@ -1139,7 +1232,7 @@ async function selectFlow(flowName) {
   currentFile = null;
   $("flowDesc").textContent = "columns: " + flowsByName[flowName].columns.join(", ");
   clearTable();
-  $("resultsPanel").style.display = "none";
+  hideBottomPanel();
   await loadFileList();
 }
 
@@ -1196,7 +1289,8 @@ async function selectFile(name) {
     if (el.querySelector(".fname").textContent === name) el.classList.add("active");
   });
   $("currentFileTitle").textContent = currentFlow + " / " + name + ".csv";
-  $("resultsPanel").style.display = "none";
+  showEditorTab("steps");
+  hideBottomPanel();
 
   const res = await fetch(`/api/scenarios?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(name)}`);
   const json = await res.json();
@@ -1411,6 +1505,7 @@ $("btnDeleteFile").addEventListener("click", () => {
 function clearTable() {
   currentColumns = [];
   currentVarColumns = [];
+  showEditorTab("steps");
   document.querySelector("#scenarioTable thead").innerHTML = "";
   document.querySelector("#scenarioTable tbody").innerHTML = "";
   document.querySelector("#varsTable thead").innerHTML = "";
@@ -1589,8 +1684,7 @@ $("btnRunScenarios").addEventListener("click", async () => {
   if (!startJson.ok) { toast("Error: " + startJson.error); return; }
 
   $("btnRunScenarios").disabled = true;
-  $("resultsPanel").style.display = "none";
-  $("runningPanel").style.display = "block";
+  showBottomPanel("running");
   $("runningScreen").style.display = $("headless").checked ? "none" : "block";
   $("runningSteps").innerHTML = readScenarioTable().map((r, i) => {
     const full = `${r.case || ""} / step ${r.step || ""}: ${r.action || ""} ${r.target || ""} ${r.value ? "= " + r.value : ""}`.trim();
@@ -1642,7 +1736,6 @@ function pollRun(runId, sid, headless) {
     if (status.status !== "running") {
       clearInterval(timer);
       $("btnRunScenarios").disabled = false;
-      $("runningPanel").style.display = "none";
       if (status.status === "error") {
         toast("Run failed: " + status.error);
       } else {
@@ -1654,7 +1747,7 @@ function pollRun(runId, sid, headless) {
 }
 
 function renderResults(results) {
-  $("resultsPanel").style.display = "block";
+  showBottomPanel("results");
   const passed = results.filter(r => r.passed).length;
   $("resultsSummary").textContent = `${passed} / ${results.length} passed`;
   const thead = document.querySelector("#resultsTable thead");
