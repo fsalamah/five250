@@ -1,0 +1,11 @@
+import { McpClient } from "./client.mjs";
+const c = new McpClient();
+const init = await c.initialize();
+console.log("serverInfo:", JSON.stringify(init.serverInfo), "| instructions len:", (init.instructions||"").length);
+const tools = await c.listTools();
+console.log("tools:", tools.tools.map(t=>t.name).join(","));
+const r = await c.call("session_list", {});
+console.log("session_list:", r.isError, r.text);
+const e = await c.call("screen_read", {});
+console.log("screen_read err:", e.isError, e.text);
+c.close();

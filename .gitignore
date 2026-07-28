@@ -5,3 +5,4 @@ target/
 results/
 extracted/
 docs/samples/
+mcp/node_modules/

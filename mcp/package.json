@@ -1,0 +1,17 @@
+{
+  "name": "five250-mcp",
+  "version": "1.0.0",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "smoke": "node test/smoke.mjs",
+    "test:live": "node test/live-test.mjs"
+  },
+  "license": "MIT",
+  "description": "MCP server exposing the five250 5250-terminal automation daemon to AI models (stdio)",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  },
+  "type": "module"
+}
