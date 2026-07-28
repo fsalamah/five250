@@ -264,6 +264,25 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    to a `.d.ts` are overwritten on the next save — it's generated, not
    authored.
 
+   **That same autocomplete is also available right in the GUI now** — the
+   Scenarios tab has a **Script** panel (below Variables) with a real Monaco
+   editor (the editor VSCode itself is built on, not a re-implementation).
+   A suite with no `.js` shows "+ Add Script"; one that has one shows the
+   editor plus **Save Script** — deliberately NOT labeled just "Save", since
+   this page already had one real bug caused by two near-identical Save
+   buttons (steps-table vs. Variables) being confused for each other.
+   `GET/PUT /api/scenario-script?flow=&file=` serves the source and (on GET)
+   the current `.d.ts` text, which the GUI feeds straight to Monaco's
+   `addExtraLib()` — the exact same mechanism, and the exact same generated
+   file, VSCode itself uses, so completions in the browser and in VSCode
+   never disagree. The file list shows a small "JS" badge for any suite that
+   has a script. Monaco is vendored locally under `web/vendor/monaco-editor/`
+   (`npm install monaco-editor`, copy `min/vs/` in) and loaded lazily via its
+   own AMD `loader.js` only the first time the Script panel is actually
+   used — never CDN-fetched, matching how everything else in this GUI is
+   self-hosted. It's a real, meaningful size addition (~12MB) to the jar,
+   worth knowing about if that ever matters for distribution.
+
 3. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
    implementation (see `RunCommandFlow.java` for the per-row pattern, or
    `GenericStepFlow.java` for the grouped/multi-step + include pattern),

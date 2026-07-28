@@ -53,6 +53,7 @@ public final class HttpApi {
         server.createContext("/api/scenarios/replay", this::handleScenarioReplay);
         server.createContext("/api/scenario-vars", this::handleScenarioVars);
         server.createContext("/api/scenario-data", this::handleScenarioData);
+        server.createContext("/api/scenario-script", this::handleScenarioScript);
         server.createContext("/api/scenarios", this::handleScenarios);
         server.createContext("/", this::handleStatic);
 
@@ -117,6 +118,7 @@ public final class HttpApi {
                         String name = f.getName().substring(0, f.getName().length() - 4);
                         m.put("name", name);
                         m.put("rows", Csv.read(f).size());
+                        m.put("hasScript", new File(dir, name + ".js").exists());
                         files.add(m);
                     }
                 }
@@ -286,6 +288,46 @@ public final class HttpApi {
                     DataDrivenRunner.saveGrid(flowDir(flowName), varsFile(flowName, fileName), flowName, fileName, columns, rows);
                     regenerateDeclaration(flowName, fileName);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
+                    return;
+                }
+                default:
+                    sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    /**
+     * /api/scenario-script : the "<file>.js" orchestrator source (see JsSuiteRunner) - GET also
+     * returns the current "<file>.d.ts" text (kept fresh by regenerateDeclaration() on every
+     * steps/vars save) so the GUI's editor can feed it straight to Monaco's
+     * addExtraLib(), same mechanism VSCode itself uses for autocomplete. PUT writes/creates the
+     * file and regenerates the declaration too - the script's own content doesn't change which
+     * variable names exist, but this keeps every save path behaving uniformly regardless.
+     */
+    private void handleScenarioScript(HttpExchange ex) throws IOException {
+        try {
+            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+            String flowName = requireParam(query, "flow");
+            String fileName = safeName(requireParam(query, "file"));
+            File jsFile = new File(flowDir(flowName), fileName + ".js");
+
+            switch (ex.getRequestMethod()) {
+                case "GET": {
+                    boolean exists = jsFile.exists();
+                    String source = exists ? java.nio.file.Files.readString(jsFile.toPath()) : "";
+                    File dtsFile = new File(flowDir(flowName), fileName + ".d.ts");
+                    String declarations = dtsFile.exists() ? java.nio.file.Files.readString(dtsFile.toPath()) : "";
+                    sendJson(ex, 200, Map.of("ok", true, "exists", exists, "source", source, "declarations", declarations));
+                    return;
+                }
+                case "PUT": {
+                    Map<String, Object> body = Json.parseObject(readBody(ex));
+                    String source = String.valueOf(body.getOrDefault("source", ""));
+                    java.nio.file.Files.writeString(jsFile.toPath(), source);
+                    regenerateDeclaration(flowName, fileName);
+                    sendJson(ex, 200, Map.of("ok", true));
                     return;
                 }
                 default:

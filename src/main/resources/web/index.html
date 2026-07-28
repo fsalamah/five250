@@ -315,6 +315,18 @@
           </div>
           <table id="varsTable"><thead></thead><tbody></tbody></table>
         </div>
+
+        <div class="panel" id="scriptPanel">
+          <div class="row" style="justify-content:space-between; margin-bottom:0">
+            <h2 style="margin:0">Script <span class="muted" style="text-transform:none;font-weight:normal">— optional &lt;file&gt;.js orchestrator (see JsSuiteRunner). Autocomplete is wired to this suite's own variables.</span></h2>
+            <div class="row" style="margin:0">
+              <button class="small" id="btnAddScript" style="display:none">+ Add Script</button>
+              <button class="primary small" id="btnSaveScript" style="display:none">Save Script</button>
+            </div>
+          </div>
+          <div id="scriptEmptyHint" class="empty-hint">This suite has no .js orchestrator yet.</div>
+          <div id="scriptEditor" style="height:320px; border:1px solid var(--border); border-radius:7px; overflow:hidden; display:none;"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -1166,7 +1178,7 @@ async function loadFileList() {
   json.files.forEach(f => {
     const item = document.createElement("div");
     item.className = "file-item" + (f.name === currentFile ? " active" : "");
-    item.innerHTML = `<span class="fname">${f.name}</span><span class="fcount">${f.rows}</span>
+    item.innerHTML = `<span class="fname">${f.name}</span><span class="fcount">${f.rows}</span>${f.hasScript ? '<span class="fcount" title="has a .js orchestrator" style="color:var(--accent)">JS</span>' : ''}
       <button class="frename" title="rename">✎</button><button class="frename" title="delete">✕</button>`;
     item.querySelector(".fname").addEventListener("click", () => selectFile(f.name));
     const [renameBtn, deleteBtn] = item.querySelectorAll(".frename");
@@ -1191,6 +1203,7 @@ async function selectFile(name) {
   if (!json.ok) { toast("Error: " + json.error); return; }
   renderScenarioTable(json.rows, json.columns);
   await loadVars();
+  await loadScript();
 }
 
 // ---------- variables: the data-driven grid (${NAME} substitution) ----------
@@ -1280,6 +1293,78 @@ $("btnSaveVars").addEventListener("click", async () => {
   if (json.ok) toast("Saved " + json.count + " row(s)"); else toast("Error: " + json.error);
 });
 
+// ---------- script: the optional <file>.js orchestrator (JsSuiteRunner) ----------
+// Monaco is loaded lazily (only once, on first actual need) via its own AMD loader.js, vendored
+// locally under /vendor/monaco-editor - never CDN-fetched, matching how everything else in this
+// GUI is self-hosted. addExtraLib() feeds it the SAME <file>.d.ts VSCode would use, so a variable
+// name typed here suggests the suite's REAL vars (see TypeDeclarations.java), not a generic
+// placeholder - the whole point of regenerating that file on every steps/vars save.
+let monacoReadyPromise = null;
+function ensureMonacoLoaded() {
+  if (monacoReadyPromise) return monacoReadyPromise;
+  monacoReadyPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/vendor/monaco-editor/min/vs/loader.js";
+    script.onload = () => {
+      window.require.config({ paths: { vs: "/vendor/monaco-editor/min/vs" } });
+      window.require(["vs/editor/editor.main"], () => resolve(window.monaco));
+    };
+    script.onerror = () => reject(new Error("failed to load Monaco from /vendor/monaco-editor"));
+    document.head.appendChild(script);
+  });
+  return monacoReadyPromise;
+}
+
+let scriptEditorInstance = null;
+let scriptExtraLibDisposable = null;
+
+async function loadScript() {
+  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`);
+  const json = await res.json();
+  const exists = json.ok && json.exists;
+
+  $("btnAddScript").style.display = exists ? "none" : "inline-block";
+  $("btnSaveScript").style.display = exists ? "inline-block" : "none";
+  $("scriptEmptyHint").style.display = exists ? "none" : "block";
+  $("scriptEditor").style.display = exists ? "block" : "none";
+  if (!exists) return;
+
+  const monaco = await ensureMonacoLoaded();
+  if (!scriptEditorInstance) {
+    scriptEditorInstance = monaco.editor.create($("scriptEditor"), {
+      value: "", language: "javascript", theme: "vs-dark", automaticLayout: true, minimap: { enabled: false }
+    });
+  }
+  // A different suite's globals must never leak into this one's autocomplete - dispose the
+  // previous extra lib before adding the one for whatever file is now selected.
+  if (scriptExtraLibDisposable) { scriptExtraLibDisposable.dispose(); scriptExtraLibDisposable = null; }
+  if (json.declarations) {
+    scriptExtraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+      json.declarations, "file:///" + currentFile + ".d.ts");
+  }
+  scriptEditorInstance.setValue(json.source || "");
+}
+
+$("btnAddScript").addEventListener("click", async () => {
+  if (!currentFile) { toast("Select or create a file first"); return; }
+  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
+    { method: "PUT", body: JSON.stringify({ source: "" }) });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  toast("Script created");
+  await loadFileList();
+  await loadScript();
+});
+
+$("btnSaveScript").addEventListener("click", async () => {
+  if (!currentFile || !scriptEditorInstance) return;
+  const source = scriptEditorInstance.getValue();
+  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
+    { method: "PUT", body: JSON.stringify({ source }) });
+  const json = await res.json();
+  toast(json.ok ? "Script saved" : "Error: " + json.error);
+});
+
 $("btnNewFile").addEventListener("click", async () => {
   const name = $("newFileName").value.trim();
   if (!name) { toast("Enter a file name"); return; }
@@ -1330,6 +1415,11 @@ function clearTable() {
   document.querySelector("#scenarioTable tbody").innerHTML = "";
   document.querySelector("#varsTable thead").innerHTML = "";
   document.querySelector("#varsTable tbody").innerHTML = "";
+  $("btnAddScript").style.display = "none";
+  $("btnSaveScript").style.display = "none";
+  $("scriptEmptyHint").style.display = "block";
+  $("scriptEditor").style.display = "none";
+  if (scriptExtraLibDisposable) { scriptExtraLibDisposable.dispose(); scriptExtraLibDisposable = null; }
 }
 
 function renderScenarioTable(rows, columns) {
