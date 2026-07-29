@@ -1,0 +1,8 @@
+case,step,action,target,value,expected
+setup,1,connect,pub400.com,23,
+recorded,1,type,label:Your user name:,FSALAMAH,
+recorded,2,key,,TAB,
+recorded,3,type,label:Password (max. 128):,Aa@123456,
+recorded,4,key,,ENTER,
+recorded,5,extract,${sankoh},freaking_data,
+recorded,6,disconnect,,,
