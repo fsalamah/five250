@@ -47,6 +47,11 @@ public final class Cli {
             return;
         }
 
+        if (args[0].equals("project")) {
+            projectCmd(args);
+            return;
+        }
+
         String cmd = args[0];
         Map<String, String> opts = parseOpts(args, 1);
         String session = opts.getOrDefault("session", "default");
@@ -242,6 +247,76 @@ public final class Cli {
         return v;
     }
 
+    // ---------- project: manage project workspaces (list/create/open/current) ----------
+
+    @SuppressWarnings("unchecked")
+    private static void projectCmd(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("Usage: five250 project list|create|open|current [name]");
+            System.exit(1);
+            return;
+        }
+        ensureDaemonRunning();
+        String sub = args[1];
+        switch (sub) {
+            case "list": {
+                Map<String, Object> resp = Json.parseObject(httpGet("/api/projects"));
+                List<Object> projects = (List<Object>) resp.get("projects");
+                for (Object o : projects) {
+                    Map<String, Object> p = (Map<String, Object>) o;
+                    System.out.println(p.get("name") + "  " + p.get("path") + "  (last opened " + p.get("lastOpened") + ")");
+                }
+                return;
+            }
+            case "create": {
+                String name = positional2(args);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("name", name);
+                Map<String, Object> resp = Json.parseObject(httpPost("/api/projects", Json.write(body)));
+                if (!Boolean.TRUE.equals(resp.get("ok"))) {
+                    System.err.println("Error: " + resp.get("error"));
+                    System.exit(1);
+                    return;
+                }
+                Map<String, Object> p = (Map<String, Object>) resp.get("project");
+                System.out.println("Created and opened project '" + p.get("name") + "' at " + p.get("path"));
+                return;
+            }
+            case "open": {
+                String name = positional2(args);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("name", name);
+                Map<String, Object> resp = Json.parseObject(httpPost("/api/projects/open", Json.write(body)));
+                if (!Boolean.TRUE.equals(resp.get("ok"))) {
+                    System.err.println("Error: " + resp.get("error"));
+                    System.exit(1);
+                    return;
+                }
+                Map<String, Object> p = (Map<String, Object>) resp.get("project");
+                System.out.println("Opened project '" + p.get("name") + "' at " + p.get("path"));
+                return;
+            }
+            case "current": {
+                Map<String, Object> resp = Json.parseObject(httpGet("/api/projects/current"));
+                Map<String, Object> p = (Map<String, Object>) resp.get("project");
+                if (p == null) {
+                    System.out.println("No project open yet - `five250 project create <name>` to make one.");
+                } else {
+                    System.out.println(p.get("name") + "  " + p.get("path"));
+                }
+                return;
+            }
+            default:
+                System.err.println("Unknown project subcommand: " + sub + " (expected list, create, open, or current)");
+                System.exit(1);
+        }
+    }
+
+    private static String positional2(String[] args) {
+        if (args.length < 3) throw new IllegalArgumentException("missing project name");
+        return args[2];
+    }
+
     // ---------- run-suite: drive a scenario file from outside the GUI, e.g. from CI ----------
 
     @SuppressWarnings("unchecked")
@@ -254,11 +329,12 @@ public final class Cli {
         long timeoutSec = Long.parseLong(opts.getOrDefault("timeout", "300"));
         String dataCsv = opts.get("data-csv");
         boolean disconnectOnFinish = opts.containsKey("disconnect-on-finish");
+        String project = opts.get("project"); // pins a project for this run only - see resolveProject() in HttpApi
 
         ensureDaemonRunning();
 
         if (dataCsv == null) {
-            System.exit(runOnce(flow, file, session, timeoutSec, baseVars, disconnectOnFinish) ? 0 : 1);
+            System.exit(runOnce(flow, file, session, timeoutSec, baseVars, disconnectOnFinish, project) ? 0 : 1);
             return;
         }
 
@@ -273,7 +349,7 @@ public final class Cli {
             Map<String, String> rowVars = new LinkedHashMap<>(baseVars);
             rowVars.putAll(rows.get(i));
             System.err.println("=== row " + (i + 1) + "/" + rows.size() + " ===");
-            if (!runOnce(flow, file, session, timeoutSec, rowVars, disconnectOnFinish)) failed++;
+            if (!runOnce(flow, file, session, timeoutSec, rowVars, disconnectOnFinish, project)) failed++;
         }
         System.out.println();
         System.out.println((rows.size() - failed) + " / " + rows.size() + " row(s) passed");
@@ -282,13 +358,15 @@ public final class Cli {
 
     /** Runs one flow/file once against one variable set; returns whether every scenario in it passed. */
     @SuppressWarnings("unchecked")
-    private static boolean runOnce(String flow, String file, String session, long timeoutSec, Map<String, String> vars, boolean disconnectOnFinish) throws Exception {
+    private static boolean runOnce(String flow, String file, String session, long timeoutSec, Map<String, String> vars,
+                                    boolean disconnectOnFinish, String project) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("flow", flow);
         body.put("file", file);
         body.put("sessionId", session);
         if (!vars.isEmpty()) body.put("vars", vars);
         if (disconnectOnFinish) body.put("disconnectOnFinish", true);
+        if (project != null && !project.isBlank()) body.put("project", project);
 
         Map<String, Object> startJson = Json.parseObject(httpPost("/api/scenarios/run", Json.write(body)));
         if (!Boolean.TRUE.equals(startJson.get("ok"))) {

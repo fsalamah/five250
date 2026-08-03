@@ -1,0 +1,5 @@
+case,step,action,target,value,expected
+row1,1,type,"20,7",WRKACTJOB,
+row1,2,key,,ENTER,
+row1,3,check,row:1,,Work with Active Jobs
+row1,4,key,,F3,

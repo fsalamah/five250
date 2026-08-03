@@ -1,0 +1,11 @@
+case,step,id,action,target,value,expected
+setup,1,,connect,pub400.com,23,
+main,1,login-start,type,label:Your user name,${USER},
+main,2,,type,label:Password,${PASSWORD},
+main,3,,key,,ENTER,
+main,4,,key,,ENTER,
+main,5,,type,"20,7",${CMD},
+main,6,,key,,ENTER,
+main,7,after-login,extract,row:1,title,
+main,8,,key,,F5,
+main,9,,key,,F3,

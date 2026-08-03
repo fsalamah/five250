@@ -15,26 +15,41 @@ Running the jar with **no command at all** (or `five250 serve`) just starts
 the daemon+GUI and stops there — for driving everything, Connect included,
 from the browser instead of the CLI.
 
-**Package is self-contained** (`Home.java`): `scenarios/` and `docs/` resolve
-relative to the running jar's own directory, not the current working
-directory (override with `FIVE250_HOME` if you want data elsewhere). Copy
-`five250.jar` + `bin/` + `five250-completion.bash` + `CLAUDE.md` +
-`scenarios/` anywhere and it works unchanged — verified live by running it
-from a completely unrelated directory.
+**Package is self-contained** (`Home.java`): the app itself (`web/`,
+`cl-commands.json`, the `projects.json` registry) resolves relative to the
+running jar's own directory, not the current working directory (override
+with `FIVE250_HOME` if you want that elsewhere). Copy `five250.jar` +
+`bin/` + `five250-completion.bash` + `CLAUDE.md` anywhere and it works
+unchanged — verified live by running it from a completely unrelated
+directory.
+
+**Project workspaces** (`ProjectRegistry.java`): all real data — `suites/`,
+`scripts/`, `results/`, `extracted/`, `docs/samples/` — lives under a
+*project* root, not directly under `Home.DIR`. Exactly one project is active
+in the daemon at a time (switch it in the GUI's titlebar, or `five250
+project open <name>`); every API call and CLI command reads/writes whichever
+project is currently active unless a call explicitly pins one (`run-suite
+--project <name>`, CI-safe — doesn't depend on or change whatever the GUI
+has open). `five250 project list|create|open|current` manages the registry.
+A fresh install with no project yet shows an empty "create one" state in the
+GUI; an existing pre-project install gets its `scenarios/` (now `suites/`)
+auto-adopted as a project named `"default"` the first time the registry
+loads — zero manual migration.
 
 **Dev-tree gotcha, learned the hard way**: running `java -jar target/five250.jar
 ...` (the natural thing to do after `mvn package`, straight from the source
 tree) means `Home.DIR` resolves to `target/`, NOT the project root — so the
-daemon silently reads and writes `target/scenarios/`, a build artifact
-directory `mvn clean` deletes, completely separate from the git-tracked
-`scenarios/` next to `pom.xml`. `Csv.read()` returns an empty list for a
-missing file with no error, so a suite silently runs "0 scenarios" instead of
-failing loudly — and worse, anything recorded live (via the GUI's Record
-feature) lands in `target/scenarios/`, invisible to git, at risk of being
-deleted by the next clean build. When iterating in the dev tree, always
-launch with `FIVE250_HOME=<project root> java -jar target/five250.jar ...`,
-or copy the built jar up to the project root first (matching how the actual
-packaged distribution is laid out — jar and `scenarios/` as siblings).
+daemon silently reads and writes `target/projects.json` (and adopts/creates
+projects under `target/`), a build artifact directory `mvn clean` deletes,
+completely separate from the git-tracked `suites/` next to `pom.xml`.
+`Csv.read()` returns an empty list for a missing file with no error, so a
+suite silently runs "0 scenarios" instead of failing loudly — and worse,
+anything recorded live (via the GUI's Record feature) lands in a
+`target/`-rooted project, invisible to git, at risk of being deleted by the
+next clean build. When iterating in the dev tree, always launch with
+`FIVE250_HOME=<project root> java -jar target/five250.jar ...`, or copy the
+built jar up to the project root first (matching how the actual packaged
+distribution is laid out — jar and its projects as siblings).
 
 **CI / headless**: `five250 run-suite --flow F --file N [--var NAME=VALUE ...]`
 drives a suite exactly like clicking Run All, prints each step + PASS/FAIL,
@@ -95,31 +110,53 @@ Document every screen discovered in `docs/screens.md` as you go: signature
 text + row, input fields (label, row, col, length, numeric/protected), valid
 F-keys, and how paging/subfile behavior works.
 
-## GUI + scenario engine
+## GUI + suite engine
 
 The daemon also serves a local web GUI at **http://127.0.0.1:25251** (starts
 automatically alongside the TCP protocol on 25250 — same `java -jar
-target/five250.jar connect ...` call brings both up). Two tabs:
+target/five250.jar connect ...` call brings both up). Three tabs:
 
 - **Terminal** — connect/signon, live screen view, type-into-field (with CL
   command autocomplete + an IDE-style docs panel, sourced from
   `web/cl-commands.json`), and an AID-key keypad. Human-usable version of the
   CLI, for manual exploration when mapping a new screen.
-- **Scenarios** — a project explorer. Pick a `Flow`, then CRUD its CSV files
-  (create/rename/delete, each a real file under `scenarios/<flow>/`), CRUD
-  rows within a file, edit its **Variables** panel, and **Run All** — runs
-  asynchronously with a live progress panel: scenario count, the exact step
-  currently executing, and (unless Headless is checked) the live 5250 screen
-  updating in near-real-time via polling. Before running, checks the target
-  session is actually connected and refuses with a clear message instead of
-  a raw "no session" error if not.
+- **Suites** — a project explorer for plain CSV suites (see #1 below): CRUD
+  files under `suites/<flow>/` (create/rename/delete), CRUD rows within a
+  file, edit its **Variables** panel, and **Run All** — runs asynchronously
+  with a live progress panel: scenario count, the exact step currently
+  executing, and (unless Headless is checked) the live 5250 screen updating
+  in near-real-time via polling. Before running, checks the target session
+  is actually connected and refuses with a clear message instead of a raw
+  "no session" error if not. There's only ever one `Flow` implementation
+  registered (`custom-steps`/`GenericStepFlow`) — no flow picker, since a
+  second one (`RunCommandFlow`, a narrow single-CL-command shortcut) turned
+  out to be entirely subsumed by it and was removed as a confusing,
+  redundant filter.
+- **Scripts** — standalone `.js` orchestrators (see #2 below), fully
+  decoupled from any one suite: CRUD files under `scripts/<name>.js`
+  (a new one starts from a template that `connect()`s its own session and
+  `disconnect()`s it in a `finally`, self-contained by default — see #2), a
+  Monaco editor with a **+ Import Suite** picker (lists every real suite on
+  disk, inserts the exact `importSuite(flow, file)` call for it) and a live
+  "declared imports" line parsed from the script's own source, **Run**, and
+  the same Running/Results/Replay panel the Suites tab uses.
 
 ### Three ways to add automation
 
 1. **Pure CSV, no code (`custom-steps` flow)** — this is the one to reach for
    first. Each scenario is a group of rows sharing a `case` id, executed in
    `step` order:
-   `case, step, action(type|key|check|extract|include|connect|wait|disconnect), target, value, expected`.
+   `case, step, id, action(type|key|check|extract|include|connect|wait|disconnect), target, value, expected`.
+   `id` is optional and blank on most rows — freeform, unique across the
+   whole file — its only use is letting a `project/scripts/*.js` script
+   address a range by name instead of raw row position (see `.steps(a, b)`
+   under #2 below); `custom-steps` itself ignores it. Uniqueness is
+   enforced, not just documented: saving a suite with two rows sharing a
+   non-blank id (the Suites tab's Save button, `PUT /api/scenarios`) is
+   rejected outright with a clear error naming the id and both row numbers
+   (`StepIds.validateUnique`) — surfaced as a toast in the GUI, not a silent
+   write. `importSuite()` re-checks the same rule as a safety net for a file
+   that reached disk some other way (hand-edited, copied in).
    `disconnect` closes the session outright - recorded automatically when the
    live session actually disconnects, so replay reaches the same end state
    the recording did (no lingering connection the live run never had).
@@ -127,7 +164,7 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    `extract` target is `message`, `row:<n>`, or `label:<text>`; `include`
    target is another CSV file name (no `.csv`) in the same flow folder — its
    steps are spliced in at that point, so one suite can reuse another
-   (cycle-checked; see `scenarios/custom-steps/signon-common.csv` +
+   (cycle-checked; see `suites/custom-steps/signon-common.csv` +
    `full-signon-v2.csv` for a worked example). Straight-line navigation with
    reuse; no conditional branching/looping.
 
@@ -150,7 +187,7 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    value/row, written by `ScenarioRunner.writeExtractedDumps` right alongside
    a timestamped `.<ts>.data.txt` copy (so a later run never clobbers an
    earlier dump) — for piping straight into another tool without touching
-   the results CSV at all. See `scenarios/custom-steps/extract-demo.csv` —
+   the results CSV at all. See `suites/custom-steps/extract-demo.csv` —
    pulls active job count, CPU%, and elapsed time off a protected line of
    WRKACTJOB.
 
@@ -159,7 +196,7 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    expected="true" for SSL); `HttpApi.autoConnectIfNeeded()` intercepts it
    before the run starts, connects only if that session doesn't already
    exist, then strips the whole pseudo-case either way. See
-   `scenarios/custom-steps/self-contained-signon.csv` — runs correctly from
+   `suites/custom-steps/self-contained-signon.csv` — runs correctly from
    a completely cold, zero-sessions daemon state, verified live. Careful:
    re-running an unconditional-signon suite on an *already* signed-on
    session will fail (the sign-on fields won't exist wherever it lands) —
@@ -170,7 +207,7 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    `wait` (value = seconds, 0-120 capped) is a deliberate, opt-in exception
    to "never sleep" — use it only for delays outside the 5250 buffer
    (a batch job finishing) that `waitReady()`'s keyboard/buffer-stability
-   polling can't detect. See `scenarios/custom-steps/wait-test.csv`.
+   polling can't detect. See `suites/custom-steps/wait-test.csv`.
 
    **`if`/`else`/`endif` and `loop`/`endloop`** give a case real control
    flow. `if`'s `target` is a JS boolean expression, e.g.
@@ -202,95 +239,130 @@ target/five250.jar connect ...` call brings both up). Two tabs:
    class (no `Java.type(...)`, filesystem, sockets — pure ECMAScript only),
    and every evaluation runs under a 1-second wall-clock timeout on a pooled
    worker thread, so a pathological expression fails fast instead of
-   hanging. See `scenarios/custom-steps/if-loop-demo.csv` for a worked
+   hanging. See `suites/custom-steps/if-loop-demo.csv` for a worked
    example — self-contained (its own `connect` + `include signon-common`, so
    it opens and runs cleanly in the GUI from a cold session), demonstrating
    `if`/`else` on an extracted title, `loop while` (a real screen value
    naturally converging), and `loop count`.
 
-2. **`<file>.js` driving `<file>.csv`, for real JS control flow instead of the
-   `if`/`loop` mini-language** — a suite with a sibling `.js` file is driven
-   entirely by that script (`JsSuiteRunner`) instead of `GenericStepFlow`
-   walking every case automatically. The script gets a global object named
-   after the suite's base filename (non-identifier characters like `-`
-   sanitized to `_`) exposing:
-   - `.vars` — a live, two-way bound object over the SAME map `${NAME}`
-     substitution reads from. `suiteX.vars.username = 'abc'` before an
-     `execute()` call feeds that value into substitution for that call; an
-     `extract` step inside an executed range writes its result back into
-     this same map (`StepActions.executeAction`), so
-     `console.log(suiteX.vars.transactionAmount)` right after reads it back.
-     Unlike plain CSV, substitution is NOT one-shot up front for these suites
-     — it happens fresh on every `execute()` call, against whatever's
-     currently in `.vars`.
-   - `.steps(a, b)` — a range over the suite's rows, addressed by absolute
-     1-based row position in the file (matching what you see in the CSV/GUI
-     table directly), not by `case`/`step` column values.
-   - a global `execute(range)` function that runs that range against the
-     live terminal right now, in order.
+2. **A standalone `project/scripts/<name>.js`, for real JS control flow
+   instead of the `if`/`loop` mini-language** — fully decoupled from any one
+   suite (`JsSuiteRunner`): a script has no CSV of its own, only whichever
+   suites it explicitly pulls in with a global `importSuite(flow, file)`
+   function. That call loads `suites/<flow>/<file>.csv` (+ its own sibling
+   `<file>.vars.csv`) fresh off disk and returns a suite object exposing:
+   - `.vars` — a live, two-way bound object over that suite's OWN vars map
+     (never shared with a different imported suite): `mySuite.vars.username
+     = 'abc'` before an `execute()` call feeds that value into substitution
+     for that call; an `extract` step inside an executed range writes its
+     result back into this same map (`StepActions.executeAction`), so
+     `console.log(mySuite.vars.transactionAmount)` right after reads it
+     back. Substitution is NOT one-shot up front — it happens fresh on every
+     `execute()` call, against whatever's currently in `.vars`.
+   - `.steps(a, b)` — a range over that suite's rows. Each of `a`/`b` is
+     either a 1-based row position in its own CSV file (matching what its
+     Steps table shows in the Suites tab) or a string naming that row's own
+     `id` cell — the CSV's optional `id` column (see the `custom-steps`
+     columns list above), blank on most rows, set only where a script needs
+     to name a boundary: `mySuite.steps("login", "after-login")`. Not
+     `case`/`step` column values either way. Mixing a number and a string
+     argument is fine. An `id` must be unique across the whole file —
+     `importSuite()` throws immediately if it isn't, instead of `steps()`
+     silently resolving to the wrong row later.
+   - `.all()` — shorthand for `.steps(1, <row count>)`, the common "just run
+     this whole suite" case.
+   A global `execute(range)` function runs any range — from any imported
+   suite — against the live terminal right now, in order; the range itself
+   carries which suite (and which vars map) it came from, so `execute()`
+   never needs to be told which suite is "current."
 
-   This means real `for`/`while`/functions/`try`/`throw` sequencing recorded
-   step-ranges, instead of learning `if`/`else`/`endif`/`loop`/`endloop`.
-   Sandboxed with `HostAccess.EXPLICIT` (only the bound suite object/
-   `execute`/`console` are reachable, no arbitrary Java classes) rather than
-   `JsCondition`'s full no-host-access sandbox, since the script has to call
-   back into Java to drive the terminal at all — a deliberately bigger bridge
-   for a deliberately more powerful authoring mode. A whole-script wall-clock
-   timeout (5 minutes) is enforced by force-cancelling the GraalJS `Context`
-   from the calling thread (`context.close(true)`) if exceeded — verified to
-   actually stop a running script, not just abandon it.
+   This means real `for`/`while`/functions/`try`/`throw` sequencing over
+   however many imported suites a script needs, instead of learning
+   `if`/`else`/`endif`/`loop`/`endloop`. Sandboxed with `HostAccess.EXPLICIT`
+   (only `importSuite`/`execute`/`console` are reachable, no arbitrary Java
+   classes) rather than `JsCondition`'s full no-host-access sandbox, since
+   the script has to call back into Java to drive the terminal at all — a
+   deliberately bigger bridge for a deliberately more powerful authoring
+   mode. A whole-script wall-clock timeout (5 minutes) is enforced by
+   force-cancelling the GraalJS `Context` from the calling thread
+   (`context.close(true)`) if exceeded — verified to actually stop a running
+   script, not just abandon it.
 
-   Limitation: `include`/`connect` rows aren't executable via `execute()`
-   (they're resolved by the surrounding pipeline before a JS-orchestrated run
-   ever starts, same as for plain CSV) — a `connect` case still runs
-   automatically for the same cold-start convenience, just don't reference
-   its row from the script. See `scenarios/custom-steps/js_orchestrator_demo.js`
-   for a worked example: self-contained, sets a var before `execute()`, reads
+   A script opens its own session with the `connect(host, port?, ssl?)`
+   global (a no-op if that session's already live — same underlying call a
+   suite's `connect` row or the Terminal tab's Connect button makes) and
+   closes it with `disconnect()`. `POST /api/scripts`'s new-script template
+   always opens with `connect(...)` and closes with `disconnect()` in a
+   `finally`, so a script is self-contained by default — pass, fail, or
+   thrown error, its session doesn't leak. Both are plain function calls,
+   not enforced: delete either from a script that should share an
+   already-connected session (or leave one open for something after it)
+   instead. The template's body is commented-out example code, not live —
+   it shows two things concretely rather than describing them in prose:
+   logging in (`importSuite('custom-steps', 'signon-common')`, set
+   `.vars.USER`/`.vars.PASSWORD` before `execute(signon.all())` —
+   `signon-common.csv` is a small reusable suite: type user, type password,
+   ENTER, ENTER) and carrying a value between two different imported
+   suites' vars (`mySuite.vars.SOME_VAR = signon.vars.USER` — each
+   `importSuite()` call gets its own `.vars` map, never shared, so a
+   hand-off like this is always explicit, never automatic). Both examples
+   were run for real (uncommented, live against pub400.com) before being
+   written into the template, including asserting the vars isolation and
+   hand-off actually behave as claimed — not just written and assumed
+   correct. `execute()` resolves the live Terminal fresh from
+   `SessionService` on every call rather than once up front, since
+   `connect()` may not have run yet when the script's `.js` was first
+   evaluated — it throws a clear "call connect() first" style error if
+   there's still no session when a range actually needs to run.
+
+   Limitation: `include`/`connect` **rows** (the CSV `action=connect`
+   pseudo-case, distinct from the `connect()` JS global above) aren't
+   executable via `execute()` — they're resolved by the surrounding pipeline
+   before a plain suite run starts, not inside an executed range — so
+   importing a suite that relies on CSV-level `include`, or trying to
+   `execute()` a range containing its `connect` row, will throw. See
+   `scripts/js_orchestrator_demo.js` for a worked example: imports
+   `custom-steps/js_orchestrator_demo`, sets a var before `execute()`, reads
    one back after an `extract`, and uses a real JS `for` loop calling
    `execute()` repeatedly — the JS-native analog of `loop count`.
 
-   **VSCode autocomplete for `.js` orchestrators**: every steps-table save
-   (`PUT /api/scenarios`) and every Variables/data-grid save (`PUT
-   /api/scenario-data`, `PUT /api/scenario-vars`) regenerates
-   `<file>.d.ts` next to the suite (`TypeDeclarations.java`) — an ambient
-   TypeScript declaration for `execute()` and the suite's own global, with
-   `.vars` keyed by every variable name currently known for that suite
-   (its vars/data grid, every `${NAME}` placeholder actually referenced in a
-   cell, and every `extract` step's output name), not just a generic
-   string-indexed object. Written even for suites with no `.js` file yet —
-   costs nothing and means the types are already waiting the moment you add
-   one. VSCode's plain-JS "implicit project" mode picks up a `.d.ts` sitting
-   next to a `.js` file automatically, no `jsconfig.json` needed. Hand edits
-   to a `.d.ts` are overwritten on the next save — it's generated, not
-   authored.
+   **Monaco editor for scripts, right in the GUI** — the Scripts tab has a
+   real Monaco editor (the editor VSCode itself is built on, not a
+   re-implementation) with **Save**, **Run**, and **+ Import Suite** (opens
+   a picker over `GET /api/suites` — every real suite on disk right now —
+   and inserts the exact `const x = importSuite("flow","file");` line at
+   the cursor, so importing is a click, not something you have to know to
+   type). A live "declared imports" line above the editor re-parses the
+   script's own source for `importSuite(...)` calls on every keystroke,
+   mirroring the same regex `GET /api/scripts/source` uses server-side, so
+   "what does this script depend on" is visible without reading the code.
+   `GET/PUT /api/scripts/source?name=` serves the source, a fixed ambient
+   `.d.ts` (`HttpApi.SCRIPT_DECLARATIONS` — `importSuite`/`Suite`/`execute`
+   types; the same shape for every script, since `importSuite`'s return
+   type never varies, so nothing needs regenerating per script or written
+   to disk) fed straight to Monaco's `addExtraLib()`, and the parsed
+   `imports` list. Monaco is vendored locally under
+   `web/vendor/monaco-editor/` (`npm install monaco-editor`, copy `min/vs/`
+   in) and loaded lazily via its own AMD `loader.js` only the first time the
+   Scripts tab is actually used — never CDN-fetched, matching how everything
+   else in this GUI is self-hosted. It's a real, meaningful size addition
+   (~12MB) to the jar, worth knowing about if that ever matters for
+   distribution.
 
-   **That same autocomplete is also available right in the GUI now** — the
-   Scenarios tab has a **Script** panel (below Variables) with a real Monaco
-   editor (the editor VSCode itself is built on, not a re-implementation).
-   A suite with no `.js` shows "+ Add Script"; one that has one shows the
-   editor plus **Save Script** — deliberately NOT labeled just "Save", since
-   this page already had one real bug caused by two near-identical Save
-   buttons (steps-table vs. Variables) being confused for each other.
-   `GET/PUT /api/scenario-script?flow=&file=` serves the source and (on GET)
-   the current `.d.ts` text, which the GUI feeds straight to Monaco's
-   `addExtraLib()` — the exact same mechanism, and the exact same generated
-   file, VSCode itself uses, so completions in the browser and in VSCode
-   never disagree. The file list shows a small "JS" badge for any suite that
-   has a script. Monaco is vendored locally under `web/vendor/monaco-editor/`
-   (`npm install monaco-editor`, copy `min/vs/` in) and loaded lazily via its
-   own AMD `loader.js` only the first time the Script panel is actually
-   used — never CDN-fetched, matching how everything else in this GUI is
-   self-hosted. It's a real, meaningful size addition (~12MB) to the jar,
-   worth knowing about if that ever matters for distribution.
-
-3. **A new `Flow` class, for anything the CSV model can't express** — write a `Flow`
-   implementation (see `RunCommandFlow.java` for the per-row pattern, or
-   `GenericStepFlow.java` for the grouped/multi-step + include pattern),
-   register it in `FlowRegistry`, rebuild. The CSV columns come from
-   `Flow.csvColumns()` and are entirely data from then on.
+3. **A new `Flow` class, for anything the CSV model can't express** — write a
+   `Flow` implementation (see `GenericStepFlow.java` for the grouped/
+   multi-step + include pattern this project actually uses), register it in
+   `FlowRegistry`, rebuild. The CSV columns come from `Flow.csvColumns()` and
+   are entirely data from then on. (A second implementation,
+   `RunCommandFlow` — one CL command + expected title per row — used to ship
+   alongside `custom-steps` but was removed: it was entirely subsumed by
+   `custom-steps`'s general step DSL, and having two `Flow`s made the
+   now-gone Suites-tab flow picker read as a confusing filter rather than a
+   real choice. Its few existing suites were converted to plain
+   `custom-steps` CSVs instead of deleted.)
 
 **Variables**: any cell in any flow's CSV may contain `${NAME}` — resolved
-from `scenarios/<flow>/<file>.vars.csv` (name/value pairs) before the
+from `suites/<flow>/<file>.vars.csv` (name/value pairs) before the
 row/case runs. Substitution happens after `include` expansion, so a suite
 that includes another must also define any variables the included suite's
 placeholders need — variables are **not** inherited automatically from
@@ -311,7 +383,7 @@ wholesale (not an append), derives the single "current" `.vars.csv` from the
 onVarsSaved`/`appendRow`) still exists for API/back-compat — it only ever
 appends one row — but the GUI itself no longer uses it.
 
-**Data-driven re-run**: `scenarios/<flow>/<file>.data.csv` (columns = every
+**Data-driven re-run**: `suites/<flow>/<file>.data.csv` (columns = every
 variable name ever saved, one row per data-driven run) has a `<file>.bat`
 (Windows) + `<file>.sh` (Linux/macOS) pair next to it, regenerated on every
 Variables-panel save. Run either one (or from CI) to replay the whole suite
@@ -325,15 +397,20 @@ entry) - the actual per-row loop and CSV parsing live in Java (reusing
 through the Variables panel) rather than the generated scripts, which are
 overwritten on every save.
 
-Scenario files live in `scenarios/<flow-name>/<file-name>.csv` (folder per
-flow, multiple named files each — a real project explorer, not one fixed
-file) — that folder holds only source/driver files (`.csv`, `.vars.csv`,
-`.data.csv`, `.bat`/`.sh`), never generated run output. Results are written
-to `results/<flow-name>/<file-name>.results.csv` (plus a timestamped copy)
-after each run, in a top-level `results/` folder (sibling to `scenarios/`),
-mirroring the flow/file structure; `extract` step dumps go the same way,
-under a top-level `extracted/` folder (see above). Failing scenarios also
-get a full screen-buffer dump at
+Suite files live in `suites/<flow-name>/<file-name>.csv`, under the current
+project's root (folder per flow, multiple named files each — a real
+explorer, not one fixed file) — that folder holds only source/driver files
+(`.csv`, `.vars.csv`, `.data.csv`, `.bat`/`.sh`), never generated run output.
+Standalone scripts live in a separate, flat `scripts/<name>.js` (no per-flow
+folder — a script isn't tied to any one flow's CSV schema). Results are
+written to `results/<flow-name>/<file-name>.results.csv` (plus a timestamped
+copy) after each run, in a top-level `results/` folder (sibling to
+`suites/`), mirroring the flow/file structure; a standalone script's run
+writes under a `results/scripts/<name>...` pseudo-flow bucket instead, same
+mechanism (`HttpApi.writeRunArtifacts`) — either way it's just one
+`ScenarioResult` list to write out identically. `extract` step dumps go the
+same way, under a top-level `extracted/` folder (see above). Failing
+scenarios also get a full screen-buffer dump at
 `docs/samples/failures/<flow-name>/<file-name>/row-N.json` (cheap — ~2KB
 each, capture liberally).
 
@@ -348,8 +425,9 @@ one silently imposed.
 
 **Replay**: every scenario captures a full screen snapshot at every step
 (pass or fail, not just failures) into `ScenarioResult.steps` — see
-`GenericStepFlow.runGroup()` and `RunCommandFlow.run()`, both call
-`result.step(label, t.snapshot())` after each meaningful action. Persisted
+`GenericStepFlow.runGroup()`, which calls `result.step(label, t.snapshot())`
+after each meaningful action (`JsSuiteRunner`'s `execute()` does the same for
+a script run, via the shared `StepActions.executeAction`). Persisted
 to `docs/samples/replays/<flow-name>/<file-name>/row-N.json` after every run
 (`ScenarioRunner.writeReplays`), fetchable later via `GET
 /api/scenarios/replay?flow=&file=&index=`. The GUI's Results table shows a

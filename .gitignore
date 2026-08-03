@@ -6,3 +6,6 @@ results/
 extracted/
 docs/samples/
 mcp/node_modules/
+projects.json
+daemon.log
+projects/

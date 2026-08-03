@@ -27,11 +27,6 @@ public final class HttpApi {
 
     public static final int PORT = 25251;
 
-    private static final File SCENARIOS_DIR = Home.file("scenarios");
-    private static final File RESULTS_DIR = Home.file("results");
-    private static final File EXTRACTED_DIR = Home.file("extracted");
-    private static final File FAILURES_DIR = Home.file("docs/samples/failures");
-    private static final File REPLAYS_DIR = Home.file("docs/samples/replays");
     private static final DateTimeFormatter RUN_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
     private final SessionService sessionService;
@@ -46,15 +41,19 @@ public final class HttpApi {
         server.setExecutor(Executors.newCachedThreadPool());
 
         server.createContext("/api/rpc", this::handleRpc);
+        server.createContext("/api/projects", this::handleProjects);
         server.createContext("/api/flows", this::handleFlows);
+        server.createContext("/api/suites", this::handleSuites);
         server.createContext("/api/scenario-files", this::handleScenarioFiles);
         server.createContext("/api/scenarios/run-status", this::handleScenariosRunStatus);
         server.createContext("/api/scenarios/run", this::handleScenariosRun);
         server.createContext("/api/scenarios/replay", this::handleScenarioReplay);
         server.createContext("/api/scenario-vars", this::handleScenarioVars);
         server.createContext("/api/scenario-data", this::handleScenarioData);
-        server.createContext("/api/scenario-script", this::handleScenarioScript);
         server.createContext("/api/scenarios", this::handleScenarios);
+        server.createContext("/api/scripts/run", this::handleScriptsRun);
+        server.createContext("/api/scripts/source", this::handleScriptsSource);
+        server.createContext("/api/scripts", this::handleScripts);
         server.createContext("/", this::handleStatic);
 
         server.start();
@@ -76,6 +75,52 @@ public final class HttpApi {
             resp = SessionService.errorResponse(e);
         }
         sendJson(ex, 200, resp);
+    }
+
+    // ---------- /api/projects : project workspace registry (list/create/open/current) ----------
+
+    private void handleProjects(HttpExchange ex) throws IOException {
+        try {
+            String path = ex.getRequestURI().getPath();
+            String method = ex.getRequestMethod();
+
+            if (path.equals("/api/projects/current") && method.equals("GET")) {
+                Map<String, Object> resp = new LinkedHashMap<>();
+                resp.put("ok", true);
+                try {
+                    resp.put("project", ProjectRegistry.current().toMap());
+                } catch (IllegalStateException e) {
+                    resp.put("project", null); // no project open yet - GUI shows a "create/open" empty state
+                }
+                sendJson(ex, 200, resp);
+                return;
+            }
+
+            if (path.equals("/api/projects/open") && method.equals("POST")) {
+                Map<String, Object> req = Json.parseObject(readBody(ex));
+                ProjectRegistry.Project p = ProjectRegistry.open(String.valueOf(req.get("name")));
+                sendJson(ex, 200, Map.of("ok", true, "project", p.toMap()));
+                return;
+            }
+
+            if (path.equals("/api/projects") && method.equals("GET")) {
+                List<Object> list = new ArrayList<>();
+                for (ProjectRegistry.Project p : ProjectRegistry.list()) list.add(p.toMap());
+                sendJson(ex, 200, Map.of("ok", true, "projects", list));
+                return;
+            }
+
+            if (path.equals("/api/projects") && method.equals("POST")) {
+                Map<String, Object> req = Json.parseObject(readBody(ex));
+                ProjectRegistry.Project p = ProjectRegistry.create(String.valueOf(req.get("name")));
+                sendJson(ex, 200, Map.of("ok", true, "project", p.toMap()));
+                return;
+            }
+
+            sendJson(ex, 404, Map.of("ok", false, "error", "no such projects route: " + method + " " + path));
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
     }
 
     // ---------- /api/flows ----------
@@ -118,7 +163,6 @@ public final class HttpApi {
                         String name = f.getName().substring(0, f.getName().length() - 4);
                         m.put("name", name);
                         m.put("rows", Csv.read(f).size());
-                        m.put("hasScript", new File(dir, name + ".js").exists());
                         files.add(m);
                     }
                 }
@@ -196,27 +240,13 @@ public final class HttpApi {
             }
             case "PUT": {
                 List<Map<String, String>> rows = toStringRows(Json.parse(readBody(ex)));
+                StepIds.validateUnique(rows);
                 Csv.write(file, FlowRegistry.get(flowName).csvColumns(), rows);
-                regenerateDeclaration(flowName, fileName);
                 sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                 return;
             }
             default:
                 sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
-        }
-    }
-
-    /** Re-derives "<file>.d.ts" from whatever's on disk right now (steps CSV + vars) - called
-     * after every save of either, so a JS orchestrator's autocomplete never drifts from the
-     * suite it actually describes. Best-effort: TypeDeclarations.write() itself swallows I/O
-     * failures rather than let a stale/missing .d.ts fail an actual save. */
-    private void regenerateDeclaration(String flowName, String fileName) {
-        try {
-            List<Map<String, String>> rows = Csv.read(scenarioFile(flowName, fileName));
-            Map<String, String> vars = Variables.load(varsFile(flowName, fileName));
-            TypeDeclarations.write(flowDir(flowName), fileName, rows, vars);
-        } catch (Throwable ignored) {
-            // quality-of-life only
         }
     }
 
@@ -244,7 +274,6 @@ public final class HttpApi {
                         if (name != null && !name.isBlank()) vars.put(name.trim(), row.getOrDefault("value", ""));
                     }
                     DataDrivenRunner.onVarsSaved(flowDir(flowName), flowName, fileName, vars);
-                    regenerateDeclaration(flowName, fileName);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
                     return;
                 }
@@ -286,48 +315,7 @@ public final class HttpApi {
                     }
                     List<Map<String, String>> rows = toStringRows(body.get("rows"));
                     DataDrivenRunner.saveGrid(flowDir(flowName), varsFile(flowName, fileName), flowName, fileName, columns, rows);
-                    regenerateDeclaration(flowName, fileName);
                     sendJson(ex, 200, Map.of("ok", true, "count", rows.size()));
-                    return;
-                }
-                default:
-                    sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
-            }
-        } catch (Throwable e) {
-            sendJson(ex, 400, SessionService.errorResponse(e));
-        }
-    }
-
-    /**
-     * /api/scenario-script : the "<file>.js" orchestrator source (see JsSuiteRunner) - GET also
-     * returns the current "<file>.d.ts" text (kept fresh by regenerateDeclaration() on every
-     * steps/vars save) so the GUI's editor can feed it straight to Monaco's
-     * addExtraLib(), same mechanism VSCode itself uses for autocomplete. PUT writes/creates the
-     * file and regenerates the declaration too - the script's own content doesn't change which
-     * variable names exist, but this keeps every save path behaving uniformly regardless.
-     */
-    private void handleScenarioScript(HttpExchange ex) throws IOException {
-        try {
-            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
-            String flowName = requireParam(query, "flow");
-            String fileName = safeName(requireParam(query, "file"));
-            File jsFile = new File(flowDir(flowName), fileName + ".js");
-
-            switch (ex.getRequestMethod()) {
-                case "GET": {
-                    boolean exists = jsFile.exists();
-                    String source = exists ? java.nio.file.Files.readString(jsFile.toPath()) : "";
-                    File dtsFile = new File(flowDir(flowName), fileName + ".d.ts");
-                    String declarations = dtsFile.exists() ? java.nio.file.Files.readString(dtsFile.toPath()) : "";
-                    sendJson(ex, 200, Map.of("ok", true, "exists", exists, "source", source, "declarations", declarations));
-                    return;
-                }
-                case "PUT": {
-                    Map<String, Object> body = Json.parseObject(readBody(ex));
-                    String source = String.valueOf(body.getOrDefault("source", ""));
-                    java.nio.file.Files.writeString(jsFile.toPath(), source);
-                    regenerateDeclaration(flowName, fileName);
-                    sendJson(ex, 200, Map.of("ok", true));
                     return;
                 }
                 default:
@@ -353,9 +341,10 @@ public final class HttpApi {
 
         try {
             Flow flow = FlowRegistry.get(flowName);
-            File csvFile = scenarioFile(flowName, fileName);
+            ProjectRegistry.Project project = resolveProject(req); // resolved once, up front - see resolveProject()
+            File csvFile = scenarioFile(project, flowName, fileName);
             List<Map<String, String>> rawRows = Csv.read(csvFile);
-            Map<String, String> vars = new LinkedHashMap<>(Variables.load(varsFile(flowName, fileName)));
+            Map<String, String> vars = new LinkedHashMap<>(Variables.load(varsFile(project, flowName, fileName)));
             Object varsOverride = req.get("vars"); // CLI/API caller can supply/override ${NAME} values externally
             if (varsOverride instanceof Map) {
                 for (Map.Entry<?, ?> e : ((Map<?, ?>) varsOverride).entrySet()) {
@@ -363,13 +352,7 @@ public final class HttpApi {
                 }
             }
 
-            File jsFile = new File(flowDir(flowName), fileName + ".js");
-            if (jsFile.exists()) {
-                runJsSuite(ex, flowName, fileName, sessionId, disconnectOnFinish, rawRows, vars, jsFile);
-                return;
-            }
-
-            List<Map<String, String>> rows = flow.preprocess(flowDir(flowName), rawRows); // splice in any "include" steps
+            List<Map<String, String>> rows = flow.preprocess(flowDir(project, flowName), rawRows); // splice in any "include" steps
             rows = Variables.substituteRows(rows, vars); // resolve ${NAME} in every cell
 
             rows = autoConnectIfNeeded(sessionId, rows); // suite can create its own session via a "connect" step
@@ -385,7 +368,7 @@ public final class HttpApi {
                 try {
                     List<ScenarioResult> results = ScenarioRunner.run(flow, t, finalRows,
                         r -> { state.results.add(r.toMap()); state.current = ""; });
-                    writeRunArtifacts(flowName, fileName, results);
+                    writeRunArtifacts(project, flowName, fileName, results);
                     state.status = "done";
                 } catch (Throwable e) {
                     state.status = "error";
@@ -409,64 +392,26 @@ public final class HttpApi {
         }
     }
 
-    /**
-     * A suite with a sibling {@code <file>.js} is driven by that script instead of
-     * GenericStepFlow walking every case automatically - see JsSuiteRunner. Deliberately uses
-     * rawRows (no include-expansion, no early ${NAME} substitution) as the addressing source for
-     * {@code suiteX.steps(a, b)}, so row numbers match exactly what's in the CSV file/GUI table;
-     * substitution happens fresh per execute() call instead, against whatever the script has put
-     * in suiteX.vars by that point. Still honors a "connect" case for the same cold-start
-     * convenience as a plain CSV suite - only the returned (stripped) row list is discarded, since
-     * addressing must stay anchored to the file's real row numbers.
-     */
-    private void runJsSuite(HttpExchange ex, String flowName, String fileName, String sessionId,
-                             boolean disconnectOnFinish, List<Map<String, String>> rawRows,
-                             Map<String, String> vars, File jsFile) throws IOException {
-        autoConnectIfNeeded(sessionId, rawRows);
-        Terminal t = sessionService.getSession(sessionId);
-        String jsSource = java.nio.file.Files.readString(jsFile.toPath());
-
-        String runId = runTracker.start(1);
-        RunTracker.RunState state = runTracker.get(runId);
-
-        new Thread(() -> {
-            Progress.set(desc -> state.current = desc);
-            try {
-                ScenarioResult r = JsSuiteRunner.run(t, fileName, rawRows, vars, jsSource);
-                state.results.add(r.toMap());
-                state.current = "";
-                writeRunArtifacts(flowName, fileName, List.of(r));
-                state.status = "done";
-            } catch (Throwable e) {
-                state.status = "error";
-                state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-            } finally {
-                Progress.clear();
-                if (disconnectOnFinish) {
-                    try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
-                }
-            }
-        }, "scenario-run-" + runId).start();
-
-        sendJson(ex, 200, Map.of("ok", true, "runId", runId, "total", 1));
-    }
-
     /** Every run gets its own timestamped copy so successive runs never clobber each other's
      * history; a fixed-name "latest" copy is kept alongside purely for convenience (grep/tail
      * without hunting for the newest timestamp) and because /api/scenarios/replay's simple
-     * flow/file/index query resolves against the untimestamped replay path. Shared by both the
-     * normal CSV run path and the JS-orchestrated one - a JS suite's single accumulated
-     * ScenarioResult writes out exactly like any other run's result list. */
-    private void writeRunArtifacts(String flowName, String fileName, List<ScenarioResult> results) throws IOException {
+     * flow/file/index query resolves against the untimestamped replay path. Shared by both a
+     * plain suite run (flowName = a real Flow name) and a standalone script run (flowName =
+     * "scripts", a pseudo-bucket - see handleScriptsRun) - either way it's just one
+     * ScenarioResult list to write out identically. */
+    private void writeRunArtifacts(ProjectRegistry.Project project, String flowName, String fileName,
+                                    List<ScenarioResult> results) throws IOException {
         String ts = LocalDateTime.now().format(RUN_TIMESTAMP);
-        File resultsDir = new File(RESULTS_DIR, flowName);
-        File extractedDir = new File(EXTRACTED_DIR, flowName);
+        File resultsDir = new File(new File(project.root, "results"), flowName);
+        File extractedDir = new File(new File(project.root, "extracted"), flowName);
+        File failuresRoot = new File(project.root, "docs/samples/failures");
+        File replaysRoot = new File(project.root, "docs/samples/replays");
         ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results.csv"), results);
         ScenarioRunner.writeResults(new File(resultsDir, fileName + ".results." + ts + ".csv"), results);
-        ScenarioRunner.writeFailureDumps(new File(new File(FAILURES_DIR, flowName), fileName), results);
-        ScenarioRunner.writeFailureDumps(new File(new File(new File(FAILURES_DIR, flowName), fileName), ts), results);
-        ScenarioRunner.writeReplays(new File(new File(REPLAYS_DIR, flowName), fileName), results);
-        ScenarioRunner.writeReplays(new File(new File(new File(REPLAYS_DIR, flowName), fileName), ts), results);
+        ScenarioRunner.writeFailureDumps(new File(new File(failuresRoot, flowName), fileName), results);
+        ScenarioRunner.writeFailureDumps(new File(new File(new File(failuresRoot, flowName), fileName), ts), results);
+        ScenarioRunner.writeReplays(new File(new File(replaysRoot, flowName), fileName), results);
+        ScenarioRunner.writeReplays(new File(new File(new File(replaysRoot, flowName), fileName), ts), results);
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
     }
@@ -543,7 +488,7 @@ public final class HttpApi {
             String flowName = requireParam(query, "flow");
             String fileName = safeName(requireParam(query, "file"));
             int index = Integer.parseInt(requireParam(query, "index"));
-            File f = new File(new File(new File(REPLAYS_DIR, flowName), fileName), "row-" + index + ".json");
+            File f = new File(new File(new File(ProjectRegistry.replaysDir(), flowName), fileName), "row-" + index + ".json");
             if (!f.exists()) {
                 sendJson(ex, 404, Map.of("ok", false, "error", "No replay found: " + f));
                 return;
@@ -560,6 +505,235 @@ public final class HttpApi {
         }
     }
 
+    // ---------- /api/suites : every suite across every flow, for the Script editor's "+ Import Suite" picker ----------
+
+    private void handleSuites(HttpExchange ex) throws IOException {
+        try {
+            List<Object> out = new ArrayList<>();
+            for (Flow f : FlowRegistry.all().values()) {
+                File dir = flowDir(f.name());
+                File[] found = dir.listFiles((d, n) -> n.endsWith(".csv") && !n.endsWith(".results.csv")
+                    && !n.endsWith(".vars.csv") && !n.endsWith(".data.csv"));
+                if (found == null) continue;
+                java.util.Arrays.sort(found, java.util.Comparator.comparing(File::getName));
+                for (File file : found) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("flow", f.name());
+                    m.put("file", file.getName().substring(0, file.getName().length() - 4));
+                    out.add(m);
+                }
+            }
+            sendJson(ex, 200, Map.of("ok", true, "suites", out));
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    // ---------- /api/scripts : standalone scripts (project/scripts/<name>.js) - list/create/delete ----------
+
+    /** Fixed ambient TypeScript declaration returned for every script's Monaco editor - unlike the
+     * old per-suite ".d.ts" (deleted along with the suite/script coupling it existed for), this
+     * never varies: importSuite()'s return shape is the same regardless of which suite you import,
+     * so there's nothing to regenerate per script and nothing to keep in sync on disk. */
+    private static final String SCRIPT_DECLARATIONS =
+        "/** Creates this run's session (no-op if already connected). Same call the Terminal tab's\n"
+        + " *  Connect button and a suite's \"connect\" row make. port defaults to 23, ssl to false. */\n"
+        + "declare function connect(host: string, port?: number, ssl?: boolean): void;\n"
+        + "/** Closes and deregisters this run's session. */\n"
+        + "declare function disconnect(): void;\n"
+        + "declare function execute(range: unknown): void;\n"
+        + "type Suite = {\n"
+        + "  /** Live-bound to that suite's own ${NAME} values - read after an execute() extract, or set before one. */\n"
+        + "  vars: { [name: string]: string };\n"
+        + "  /** Rows a..b, inclusive. Each of a/b is a 1-based row position in that suite's own\n"
+        + "   *  CSV file, OR a string naming that row's own \"id\" cell (the CSV's optional id\n"
+        + "   *  column) - mixing a number and a string is fine, e.g. steps(\"login\", 12). */\n"
+        + "  steps(a: number | string, b: number | string): unknown;\n"
+        + "  /** Every row in the suite, in file order - shorthand for steps(1, <row count>). */\n"
+        + "  all(): unknown;\n"
+        + "};\n"
+        + "/** Loads suites/<flow>/<file>.csv (+ its own .vars.csv) and returns it as a Suite. */\n"
+        + "declare function importSuite(flow: string, file: string): Suite;\n";
+
+    /** A new script starts from this template rather than empty - self-contained by default:
+     * opens its own session, always closes it in a finally (pass or fail), and shows exactly
+     * where an importSuite() call and its execute() calls go, plus how to log in and how to
+     * carry a value between two different imported suites' vars. Edit or delete any of it
+     * freely - this is a starting point, not an enforced shape. Every claim in these comments
+     * was verified against a real running script before being written here (not just written
+     * and assumed correct) - see suites/custom-steps/signon-common.csv for the login suite
+     * referenced below. */
+    private static final String NEW_SCRIPT_TEMPLATE =
+        "connect('pub400.com', 23);\n"
+        + "try {\n"
+        + "  // --- Logging in ---\n"
+        + "  // suites/custom-steps/signon-common.csv is a small, reusable suite: type user,\n"
+        + "  // type password, ENTER, ENTER. Set its vars BEFORE execute() - substitution\n"
+        + "  // happens fresh on every execute() call, against whatever's currently in .vars.\n"
+        + "  // const signon = importSuite('custom-steps', 'signon-common');\n"
+        + "  // signon.vars.USER = 'your-pub400-user';\n"
+        + "  // signon.vars.PASSWORD = 'your-pub400-password';\n"
+        + "  // execute(signon.all());\n"
+        + "\n"
+        + "  // --- Using variables across different suites ---\n"
+        + "  // Each importSuite() call returns its OWN .vars map - setting one suite's vars\n"
+        + "  // never touches a different suite's, even if both use the same ${NAME}. To carry\n"
+        + "  // a value from one suite into another, copy it across explicitly:\n"
+        + "  // const mySuite = importSuite('custom-steps', '<suite-name>');\n"
+        + "  // mySuite.vars.SOME_VAR = signon.vars.USER;   // explicit hand-off, not automatic\n"
+        + "  // execute(mySuite.all());\n"
+        + "} finally {\n"
+        + "  disconnect();\n"
+        + "}\n";
+
+    private void handleScripts(HttpExchange ex) throws IOException {
+        try {
+            switch (ex.getRequestMethod()) {
+                case "GET": {
+                    File dir = scriptsDir();
+                    dir.mkdirs();
+                    List<Object> scripts = new ArrayList<>();
+                    File[] found = dir.listFiles((d, n) -> n.endsWith(".js"));
+                    if (found != null) {
+                        java.util.Arrays.sort(found, java.util.Comparator.comparing(File::getName));
+                        for (File f : found) {
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("name", f.getName().substring(0, f.getName().length() - 3));
+                            scripts.add(m);
+                        }
+                    }
+                    sendJson(ex, 200, Map.of("ok", true, "scripts", scripts));
+                    return;
+                }
+                case "POST": {
+                    Map<String, Object> req = Json.parseObject(readBody(ex));
+                    String name = safeName((String) req.get("name"));
+                    File file = scriptFile(name);
+                    if (file.exists()) {
+                        sendJson(ex, 409, Map.of("ok", false, "error", "Script already exists: " + name));
+                        return;
+                    }
+                    file.getParentFile().mkdirs();
+                    java.nio.file.Files.writeString(file.toPath(), NEW_SCRIPT_TEMPLATE);
+                    sendJson(ex, 200, Map.of("ok", true, "name", name));
+                    return;
+                }
+                case "DELETE": {
+                    Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+                    String name = safeName(requireParam(query, "name"));
+                    scriptFile(name).delete();
+                    sendJson(ex, 200, Map.of("ok", true));
+                    return;
+                }
+                default:
+                    sendJson(ex, 405, Map.of("ok", false, "error", "method not supported"));
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    /** /api/scripts/source : one script's own source - GET also returns the fixed
+     * SCRIPT_DECLARATIONS text (for Monaco's addExtraLib) and every importSuite(flow, file) call
+     * found in the source right now, parsed fresh on each GET - so the GUI's "declared imports"
+     * display can never drift from what the script actually contains. */
+    private static final java.util.regex.Pattern IMPORT_SUITE_CALL =
+        java.util.regex.Pattern.compile("importSuite\\(\\s*[\"']([^\"']+)[\"']\\s*,\\s*[\"']([^\"']+)[\"']\\s*\\)");
+
+    private void handleScriptsSource(HttpExchange ex) throws IOException {
+        try {
+            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+            String name = safeName(requireParam(query, "name"));
+            File file = scriptFile(name);
+
+            switch (ex.getRequestMethod()) {
+                case "GET": {
+                    boolean exists = file.exists();
+                    String source = exists ? java.nio.file.Files.readString(file.toPath()) : "";
+                    List<Object> imports = new ArrayList<>();
+                    java.util.regex.Matcher m = IMPORT_SUITE_CALL.matcher(source);
+                    while (m.find()) {
+                        Map<String, Object> imp = new LinkedHashMap<>();
+                        imp.put("flow", m.group(1));
+                        imp.put("file", m.group(2));
+                        imports.add(imp);
+                    }
+                    sendJson(ex, 200, Map.of("ok", true, "exists", exists, "source", source,
+                        "declarations", SCRIPT_DECLARATIONS, "imports", imports));
+                    return;
+                }
+                case "PUT": {
+                    Map<String, Object> body = Json.parseObject(readBody(ex));
+                    String source = String.valueOf(body.getOrDefault("source", ""));
+                    file.getParentFile().mkdirs();
+                    java.nio.file.Files.writeString(file.toPath(), source);
+                    sendJson(ex, 200, Map.of("ok", true));
+                    return;
+                }
+                default:
+                    sendJson(ex, 405, Map.of("ok", false, "error", "GET or PUT only"));
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    /** /api/scripts/run : runs one standalone script in the background, same runId/poll pattern as
+     * /api/scenarios/run - reuses handleScenariosRunStatus (generic by runId) for polling and
+     * writeRunArtifacts() under a "scripts" pseudo-flow bucket, so results/extracted/replays for a
+     * script run are viewable through the exact same endpoints a suite run's are. No pre-connect
+     * check here (unlike the old per-suite "connect" row's pseudo-case handling) - a script is
+     * expected to call the connect() global itself (the new-script template always does); if it
+     * doesn't and no session already exists, execute() surfaces a clear error the moment it's
+     * actually needed rather than failing the whole run up front. */
+    private void handleScriptsRun(HttpExchange ex) throws IOException {
+        if (!ex.getRequestMethod().equals("POST")) {
+            sendJson(ex, 405, Map.of("ok", false, "error", "POST only"));
+            return;
+        }
+        Map<String, Object> req = Json.parseObject(readBody(ex));
+        String name = safeName((String) req.get("name"));
+        String sessionId = req.getOrDefault("sessionId", "default").toString();
+        boolean disconnectOnFinish = Boolean.TRUE.equals(req.get("disconnectOnFinish"));
+
+        try {
+            ProjectRegistry.Project project = resolveProject(req);
+            File scriptFile = new File(scriptsDir(project), name + ".js");
+            if (!scriptFile.isFile()) {
+                sendJson(ex, 200, Map.of("ok", false, "error", "No such script: " + name));
+                return;
+            }
+            String jsSource = java.nio.file.Files.readString(scriptFile.toPath());
+            File suitesRoot = new File(project.root, "suites");
+
+            String runId = runTracker.start(1);
+            RunTracker.RunState state = runTracker.get(runId);
+
+            new Thread(() -> {
+                Progress.set(desc -> state.current = desc);
+                try {
+                    ScenarioResult r = JsSuiteRunner.run(sessionService, sessionId, name, suitesRoot, jsSource);
+                    state.results.add(r.toMap());
+                    state.current = "";
+                    writeRunArtifacts(project, "scripts", name, List.of(r));
+                    state.status = "done";
+                } catch (Throwable e) {
+                    state.status = "error";
+                    state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                } finally {
+                    Progress.clear();
+                    if (disconnectOnFinish) {
+                        try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
+                    }
+                }
+            }, "script-run-" + runId).start();
+
+            sendJson(ex, 200, Map.of("ok", true, "runId", runId, "total", 1));
+        } catch (Throwable e) {
+            sendJson(ex, 200, SessionService.errorResponse(e));
+        }
+    }
+
     private static Map<String, Object> ok(Map<String, Object> data) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", true);
@@ -568,15 +742,51 @@ public final class HttpApi {
     }
 
     private File flowDir(String flowName) {
-        return new File(SCENARIOS_DIR, safeName(flowName));
+        return flowDir(ProjectRegistry.current(), flowName);
+    }
+
+    private File flowDir(ProjectRegistry.Project project, String flowName) {
+        return new File(new File(project.root, "suites"), safeName(flowName));
+    }
+
+    /** Where standalone scripts live - project/scripts/<name>.js, flat (no per-flow folder,
+     * unlike suites/): a script isn't tied to any one flow's CSV schema, it can importSuite()
+     * from any of them, so there's no flow to namespace it under. */
+    private File scriptsDir() {
+        return scriptsDir(ProjectRegistry.current());
+    }
+
+    private File scriptsDir(ProjectRegistry.Project project) {
+        return new File(project.root, "scripts");
+    }
+
+    private File scriptFile(String name) {
+        return new File(scriptsDir(), safeName(name) + ".js");
     }
 
     private File scenarioFile(String flowName, String fileName) {
         return new File(flowDir(flowName), fileName + ".csv");
     }
 
+    private File scenarioFile(ProjectRegistry.Project project, String flowName, String fileName) {
+        return new File(flowDir(project, flowName), fileName + ".csv");
+    }
+
     private File varsFile(String flowName, String fileName) {
         return new File(flowDir(flowName), fileName + ".vars.csv");
+    }
+
+    private File varsFile(ProjectRegistry.Project project, String flowName, String fileName) {
+        return new File(flowDir(project, flowName), fileName + ".vars.csv");
+    }
+
+    /** Resolves which project a run should use: an explicit "project" field in the request body
+     * (Cli's `--project`, CI-friendly - pins a project for one call without depending on or
+     * changing whatever the GUI currently has open), else whatever's currently active. */
+    private ProjectRegistry.Project resolveProject(Map<String, Object> req) {
+        Object p = req.get("project");
+        if (p != null && !String.valueOf(p).isBlank()) return ProjectRegistry.byName(String.valueOf(p));
+        return ProjectRegistry.current();
     }
 
     /** Strips path separators and traversal so file names can't escape the scenarios directory. */

@@ -9,7 +9,6 @@ public final class FlowRegistry {
     private static final Map<String, Flow> FLOWS = new LinkedHashMap<>();
 
     static {
-        register(new RunCommandFlow());
         register(new GenericStepFlow());
     }
 

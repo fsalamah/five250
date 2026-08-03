@@ -3,51 +3,60 @@
 <head>
 <meta charset="utf-8">
 <title>five250</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0d0f13; --panel: #161923; --panel-alt: #1b1f2b; --border: #282e3d; --border-soft: #20242f; --text: #e4e8f1;
-    --muted: #838da3; --accent: #5b9dff; --accent-dim: #3d6bb0; --green: #3ecf7e; --red: #ff6767;
+    --bg: #0F1115; --panel: rgba(22, 26, 32, 0.72); --panel-alt: #1C2128; --border: rgba(156, 163, 175, 0.14); --border-soft: rgba(156, 163, 175, 0.08); --text: #E5E7EB;
+    --muted: #9CA3AF; --accent: #B0B8C4; --accent-dim: #6B7280; --green: #3ecf7e; --red: #ff6767;
     --mono: "Cascadia Code","Consolas","IBM Plex Mono",monospace;
-    --sans: -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+    --sans: "Montserrat", -apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+    --silk-ease: cubic-bezier(0.16, 1, 0.3, 1);
     --shadow-1: 0 1px 2px rgba(0,0,0,.3);
     --shadow-2: 0 8px 24px rgba(0,0,0,.35);
-    --radius: 9px;
+    --radius: 0px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0; color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased;
+    background: linear-gradient(180deg, #0F1115 0%, #161A20 35%, #1C2128 70%, #0D0F13 100%);
+    background-attachment: fixed;
+  }
   ::selection { background: var(--accent-dim); color: #fff; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 6px; border: 2px solid var(--bg); }
-  ::-webkit-scrollbar-thumb:hover { background: #384155; }
+  ::-webkit-scrollbar-thumb { background: #2A2E35; border-radius: 6px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: #3D424A; }
   /* ---------- VSCode-style shell: titlebar / activity-bar / sidebar / main-content / bottom-panel / status-bar ---------- */
   html, body { height: 100%; }
   .app-shell { display: flex; flex-direction: column; height: 100vh; }
   .titlebar {
     display: flex; align-items: center; gap: 16px; padding: 9px 16px; flex: 0 0 auto;
-    background: linear-gradient(180deg, #191d28, #14171f); border-bottom: 1px solid var(--border);
+    background: rgba(15, 17, 21, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
     box-shadow: var(--shadow-1); z-index: 50;
   }
-  .titlebar h1 { font-size: 14px; margin: 0; font-weight: 700; letter-spacing: .02em; color: #f0f2f7; }
+  .titlebar h1 { font-size: 13px; margin: 0; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--text); }
   .titlebar h1::before { content: "▣ "; color: var(--accent); }
   .shell-body { flex: 1 1 auto; display: flex; min-height: 0; }
   .activity-bar {
     flex: 0 0 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
-    background: #0e1016; border-right: 1px solid var(--border-soft);
+    background: var(--base-mid, #161A20); border-right: 1px solid var(--border-soft);
   }
   .activity-bar button.tab {
     width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
     background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px;
-    border-radius: 6px; padding: 0; transition: background .15s, color .15s;
+    border-radius: 0; padding: 0; transition: background .8s var(--silk-ease), color .8s var(--silk-ease);
     border-left: 2px solid transparent;
   }
-  .activity-bar button.tab:hover { color: var(--text); background: #1a1e29; }
-  .activity-bar button.tab.active { color: var(--accent); background: #1a2333; border-left-color: var(--accent); }
+  .activity-bar button.tab:hover { color: var(--text); background: #1C2128; }
+  .activity-bar button.tab.active { color: var(--accent); background: #232830; border-left-color: var(--accent); }
   .sidebar {
-    flex: 0 0 250px; overflow-y: auto; padding: 14px 12px; background: #12141c;
+    flex: 0 0 250px; overflow-y: auto; padding: 14px 12px; background: #12141a;
     border-right: 1px solid var(--border-soft);
   }
-  .sidebar h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+  .sidebar h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .15em; color: var(--muted); font-weight: 600; margin: 0 0 10px; }
   .main-content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
   section.view { display: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 20px; }
   section.view.active { display: flex; flex-direction: column; animation: viewIn .12s ease-out; }
@@ -63,12 +72,12 @@
   button.editor-tab.active { color: var(--text); border-bottom-color: var(--accent); }
   .editor-tab-content { display: none; }
   .editor-tab-content.active { display: block; }
-  .bottom-panel { flex: 0 0 auto; max-height: 32vh; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--panel); }
+  .bottom-panel { flex: 0 0 auto; max-height: 32vh; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--panel); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .bottom-panel.collapsed .bp-body { display: none; }
   .bottom-panel-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 10px 0; flex: 0 0 auto; }
   button.bp-tab {
     background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
-    padding: 6px 12px; cursor: pointer; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    padding: 6px 12px; cursor: pointer; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em;
   }
   button.bp-tab:hover { color: var(--text); }
   button.bp-tab.active { color: var(--text); border-bottom-color: var(--accent); }
@@ -78,8 +87,8 @@
   .bp-content { display: none; }
   .bp-content.active { display: block; }
   .status-bar {
-    flex: 0 0 24px; display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 12px;
-    background: #0e1016; border-top: 1px solid var(--border-soft); color: var(--muted);
+    flex: 0 0 24px; display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 11px;
+    background: #0e1014; border-top: 1px solid var(--border-soft); color: var(--muted);
   }
   .status-bar .status { color: var(--muted); }
   .status-bar .status.connected { color: var(--green); }
@@ -87,72 +96,76 @@
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-1);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   }
-  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
   label { font-size: 12px; color: var(--muted); font-weight: 500; }
   input, select {
-    background: #0b0d13; border: 1px solid var(--border); color: var(--text); padding: 7px 9px;
-    border-radius: 6px; font-size: 13px; transition: border-color .15s, box-shadow .15s; font-family: inherit;
+    background: #0b0d10; border: 1px solid var(--border); color: var(--text); padding: 7px 9px;
+    border-radius: 0; font-size: 13px; transition: border-color .3s var(--silk-ease), box-shadow .3s var(--silk-ease); font-family: inherit;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,157,255,.15); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(176,184,196,.15); }
   input[type=checkbox] { width: auto; accent-color: var(--accent); }
   button {
-    background: #1e2330; border: 1px solid var(--border); color: var(--text); padding: 7px 14px;
-    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s;
+    background: #1C2128; border: 1px solid var(--border); color: var(--text); padding: 7px 16px;
+    border-radius: 0; cursor: pointer; font-size: 12px; font-weight: 500; transition: all .3s var(--silk-ease); font-family: inherit;
   }
-  button:hover { border-color: var(--accent); background: #232a3a; }
+  button:hover { border-color: var(--accent); background: #262b33; }
   button:active { transform: translateY(1px); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 2px 8px rgba(91,157,255,.3); }
-  button.primary:hover { background: #6ba8ff; border-color: #6ba8ff; }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color: transparent; color: #0F1115; font-weight: 600;
+    box-shadow: 0 2px 12px rgba(176,184,196,.2);
+  }
+  button.primary:hover { transform: scale(1.02); box-shadow: 0 6px 24px rgba(176,184,196,.25); }
   button.danger { background: #2e1618; border-color: #4a2226; color: #ff9b9b; }
   button.danger:hover { border-color: var(--red); background: #3a1a1d; }
-  button.small { padding: 4px 10px; font-size: 12px; }
+  button.small { padding: 4px 12px; font-size: 11px; }
   #screen {
-    font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #060810; color: #6ee06e;
-    padding: 14px; border-radius: 7px; white-space: pre; overflow-x: auto; border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #060709; color: #6ee06e;
+    padding: 14px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border);
     min-height: 340px; box-shadow: inset 0 1px 4px rgba(0,0,0,.5);
   }
   #oiaLine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { border-bottom: 1px solid var(--border-soft); padding: 8px 10px; text-align: left; }
   thead th { border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: var(--panel-alt); }
-  tbody tr { transition: background .1s; }
-  tbody tr:hover { background: #1a1f2c; }
-  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 3px 2px; border-radius: 4px; }
-  td input:focus { background: #0b0d13; box-shadow: 0 0 0 2px rgba(91,157,255,.2); outline: none; }
+  th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; background: var(--panel-alt); }
+  tbody tr { transition: background .3s var(--silk-ease); }
+  tbody tr:hover { background: #1a1e24; }
+  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 3px 2px; border-radius: 0; }
+  td input:focus { background: #0b0d10; box-shadow: 0 0 0 2px rgba(176,184,196,.2); outline: none; }
   .pass { color: var(--green); font-weight: 600; }
   .fail { color: var(--red); font-weight: 600; }
   .keypad { display: flex; flex-wrap: wrap; gap: 6px; }
-  pre.dump { background: #060810; padding: 8px; border-radius: 6px; font-size: 11px; max-height: 200px; overflow: auto; }
+  pre.dump { background: #060709; padding: 8px; border-radius: 0; font-size: 11px; max-height: 200px; overflow: auto; }
   .muted { color: var(--muted); font-size: 12px; }
   .toast {
-    position: fixed; bottom: 20px; right: 20px; background: #1d2230; border: 1px solid var(--border);
-    padding: 11px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transform: translateY(6px);
-    transition: opacity .2s, transform .2s; pointer-events: none; box-shadow: var(--shadow-2);
+    position: fixed; bottom: 20px; right: 20px; background: rgba(28, 33, 40, 0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border);
+    padding: 11px 16px; border-radius: 0; font-size: 13px; opacity: 0; transform: translateY(6px);
+    transition: opacity .3s var(--silk-ease), transform .3s var(--silk-ease); pointer-events: none; box-shadow: var(--shadow-2);
   }
   .toast.show { opacity: 1; transform: translateY(0); }
 
   #fileList { display: flex; flex-direction: column; gap: 2px; }
-  .file-item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .12s; border: 1px solid transparent; }
-  .file-item:hover { background: #1e2330; }
-  .file-item.active { background: #1d2c45; border-color: var(--accent-dim); }
+  .file-item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 0; cursor: pointer; font-size: 13px; transition: background .3s var(--silk-ease); border: 1px solid transparent; }
+  .file-item:hover { background: #1C2128; }
+  .file-item.active { background: #202832; border-color: var(--accent-dim); }
   .file-item .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-item .fcount { color: var(--muted); font-size: 11px; background: #0f1219; padding: 1px 6px; border-radius: 10px; }
+  .file-item .fcount { color: var(--muted); font-size: 11px; background: #14171d; padding: 1px 6px; border-radius: 0; }
   .file-item .frename { opacity: 0; border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; transition: opacity .12s, color .12s; }
   .file-item .frename:hover { color: var(--text); }
   .file-item:hover .frename { opacity: 1; }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
 
-  .ac-dropdown { position: fixed; z-index: 500; background: #1a1e29; border: 1px solid var(--border); border-radius: 8px; max-height: 280px; overflow-y: auto; box-shadow: var(--shadow-2); }
+  .ac-dropdown { position: fixed; z-index: 500; background: #1a1e24; border: 1px solid var(--border); border-radius: 0; max-height: 280px; overflow-y: auto; box-shadow: var(--shadow-2); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .ac-item { padding: 7px 11px; cursor: pointer; border-bottom: 1px solid var(--border-soft); }
   .ac-item:last-child { border-bottom: none; }
-  .ac-item.active, .ac-item:hover { background: #223049; }
+  .ac-item.active, .ac-item:hover { background: #232830; }
   .ac-item .ac-name { font-family: var(--mono); color: var(--accent); font-weight: 600; font-size: 13px; }
   .ac-item .ac-desc { color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; }
 
-  .docs-panel { background: #0b0d13; border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; font-size: 12px; margin-top: 10px; }
+  .docs-panel { background: #0b0d10; border: 1px solid var(--border); border-radius: 0; padding: 10px 12px; font-size: 12px; margin-top: 10px; }
   .docs-panel .docs-name { font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 13px; }
   .docs-panel .docs-syntax { font-family: var(--mono); color: #8fe6a8; margin: 5px 0; white-space: pre-wrap; }
   .docs-panel .docs-desc { color: var(--text); margin-bottom: 6px; line-height: 1.4; }
@@ -162,30 +175,30 @@
 
   .replay-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 1000; align-items: center; justify-content: center; }
   .replay-backdrop.show { display: flex; }
-  .replay-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; width: min(900px, 92vw); max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-  #replayScreen { font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #05060a; color: #6ee06e; padding: 12px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); }
+  .replay-modal { background: rgba(22, 26, 32, 0.94); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid var(--border); border-radius: 0; padding: 18px; width: min(900px, 92vw); max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  #replayScreen { font-family: var(--mono); font-size: 13px; line-height: 1.35; background: #050608; color: #6ee06e; padding: 12px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border); }
   .replay-link { background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 12px; padding: 0; }
 
-  .badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; background: #2a2f3a; color: var(--muted); }
+  .badge { font-size: 10px; padding: 3px 10px; border-radius: 0; background: #232830; color: var(--muted); letter-spacing: .05em; }
   .badge.connected { background: #143a22; color: var(--green); }
   .badge.disconnected { background: #3a1f22; color: #ff9b9b; }
-  #runningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #05060a; color: #6ee06e; padding: 10px; border-radius: 6px; white-space: pre; overflow-x: auto; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
+  #runningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #050608; color: #6ee06e; padding: 10px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
   #btnRecordToggle.active { background: var(--red); border-color: var(--red); color: white; animation: recordPulse 1.5s ease-in-out infinite; }
   @keyframes recordPulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
 
-  .field-editable { background: #13202c; border-bottom: 1px dashed var(--accent); border-radius: 2px; }
+  .field-editable { background: #17222c; border-bottom: 1px dashed var(--accent); border-radius: 2px; }
   .field-protected { color: #9aa4b8; }
-  .field-selected { background: var(--accent) !important; color: #05060a !important; }
+  .field-selected { background: var(--accent) !important; color: #0F1115 !important; }
   #fieldsTable tbody tr.clickable { cursor: pointer; }
-  #fieldsTable tbody tr.clickable:hover { background: #1e2330; }
-  #fieldsTable tbody tr.field-selected td { background: var(--accent); color: #05060a; }
+  #fieldsTable tbody tr.clickable:hover { background: #1C2128; }
+  #fieldsTable tbody tr.field-selected td { background: var(--accent); color: #0F1115; }
   #fieldsTable td.mono, #fieldsTable td.value { font-family: var(--mono); }
   .inline-field-input {
     font-family: var(--mono); font-size: 13px; line-height: 1.35;
     background: #223049; color: #eafff0; border: none; outline: 1px solid var(--accent);
     padding: 0; margin: 0; border-radius: 2px; caret-color: #eafff0;
   }
-  #btnImmersive.active { background: var(--accent); border-color: var(--accent); color: white; }
+  #btnImmersive.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color: transparent; color: #0F1115; }
   /* !important: the sidebar's shown/hidden state is also toggled via inline style.display by the
      activity-bar switch logic - a stylesheet rule alone would lose to that inline style. */
   body.immersive .titlebar h1, body.immersive .activity-bar, body.immersive .sidebar,
@@ -201,19 +214,19 @@
   .step-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; max-height: 140px; overflow-y: auto; padding: 2px; }
   .step-chip {
     display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; font-size: 12px; cursor: pointer;
-    font-family: var(--mono); background: #1a1e29; border: 1px solid var(--border); border-radius: 20px;
-    max-width: 220px; transition: background .12s, border-color .12s;
+    font-family: var(--mono); background: #1a1e24; border: 1px solid var(--border); border-radius: 0;
+    max-width: 220px; transition: background .3s var(--silk-ease), border-color .3s var(--silk-ease);
   }
   .step-chip:hover { border-color: var(--accent-dim); background: #1e2330; }
-  .step-chip.current { background: var(--accent); color: #05060a; font-weight: 600; border-color: var(--accent); }
+  .step-chip.current { background: var(--accent); color: #0F1115; font-weight: 600; border-color: var(--accent); }
   .step-chip .chip-num { font-weight: 700; opacity: .8; }
   .step-chip.current .chip-num { opacity: 1; }
   .step-chip .chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .step-strip.not-clickable .step-chip { cursor: default; }
 
   #terminalScreenPanel { position: relative; }
-  #btnSelectArea.active { background: var(--accent); border-color: var(--accent); color: white; }
-  #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(79,157,255,.18); pointer-events: none; z-index: 10; }
+  #btnSelectArea.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color: transparent; color: #0F1115; }
+  #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(176,184,196,.18); pointer-events: none; z-index: 10; }
   #areaSelectOverlay.locked { border-style: solid; border-color: #ffcf5c; background: rgba(255,207,92,.22); }
 
   #scenarioTable .row-grip { cursor: grab; color: var(--muted); text-align: center; width: 20px; user-select: none; }
@@ -227,12 +240,14 @@
 <div class="app-shell">
   <div class="titlebar">
     <h1>five250</h1>
+    <button id="btnProjectSwitch" class="badge" style="cursor:pointer;margin-left:auto">· no project ·</button>
   </div>
 
-  <div class="shell-body">
+  <div class="shell-body" id="shellBody">
     <div class="activity-bar">
       <button class="tab active" data-view="terminal" title="Terminal">⌨</button>
-      <button class="tab" data-view="scenarios" title="Scenarios">▤</button>
+      <button class="tab" data-view="scenarios" title="Suites">▤</button>
+      <button class="tab" data-view="scripts" title="Scripts">📜</button>
     </div>
 
     <aside class="sidebar" id="sidebarTerminal" style="display:none">
@@ -241,16 +256,23 @@
     </aside>
 
     <aside class="sidebar" id="sidebarScenarios" style="display:none">
-      <div class="row" style="margin-bottom:6px">
-        <label>Flow</label><select id="flowSelect" style="flex:1"></select>
-      </div>
-      <div class="muted" id="flowDesc" style="margin-bottom:14px"></div>
-      <h2>Explorer</h2>
+      <h2>Suites</h2>
+      <div class="muted" style="margin-bottom:14px">Plain data - CSV steps, no code. Run them straight, or pull them into a script from the Scripts tab.</div>
       <div class="row" style="margin-bottom:8px">
-        <input id="newFileName" autocomplete="off" placeholder="new file name" style="flex:1">
+        <input id="newFileName" autocomplete="off" placeholder="new suite name" style="flex:1">
         <button class="primary small" id="btnNewFile">+ New</button>
       </div>
       <div id="fileList"></div>
+    </aside>
+
+    <aside class="sidebar" id="sidebarScripts" style="display:none">
+      <h2>Scripts</h2>
+      <div class="muted" style="margin-bottom:14px">Standalone JS orchestrators. A script has no suite of its own - pull in whichever suites it needs with importSuite().</div>
+      <div class="row" style="margin-bottom:8px">
+        <input id="newScriptName" autocomplete="off" placeholder="new script name" style="flex:1">
+        <button class="primary small" id="btnNewScript">+ New</button>
+      </div>
+      <div id="scriptList"></div>
     </aside>
 
     <div class="main-content">
@@ -333,7 +355,6 @@
       <div class="editor-tabs">
         <button class="editor-tab active" data-tab="steps">Steps</button>
         <button class="editor-tab" data-tab="vars">Variables</button>
-        <button class="editor-tab" data-tab="script">Script</button>
       </div>
 
       <div class="editor-tab-content active" id="tabContentSteps">
@@ -352,18 +373,6 @@
         </div>
         <table id="varsTable"><thead></thead><tbody></tbody></table>
       </div>
-
-      <div class="editor-tab-content" id="tabContentScript">
-        <div class="row" style="justify-content:space-between; margin-bottom:10px">
-          <div class="muted" style="text-transform:none">optional &lt;file&gt;.js orchestrator (see JsSuiteRunner). Autocomplete is wired to this suite's own variables.</div>
-          <div class="row" style="margin:0">
-            <button class="small" id="btnAddScript" style="display:none">+ Add Script</button>
-            <button class="primary small" id="btnSaveScript" style="display:none">Save Script</button>
-          </div>
-        </div>
-        <div id="scriptEmptyHint" class="empty-hint">This suite has no .js orchestrator yet.</div>
-        <div id="scriptEditor" style="height:320px; border:1px solid var(--border); border-radius:7px; overflow:hidden; display:none;"></div>
-      </div>
     </div>
 
     <div class="bottom-panel collapsed" id="bottomPanel">
@@ -381,6 +390,44 @@
         <div class="bp-content" id="bpContentResults">
           <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
           <table id="resultsTable"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-scripts">
+    <div class="editor-area">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0" id="currentScriptTitle">No script selected</h2>
+        <div class="row" style="margin:0">
+          <label>Run against session</label><input id="scriptSession" autocomplete="off" value="default" style="width:90px">
+          <span id="scriptSessionBadge" class="badge">checking…</span>
+          <label title="Close the session when the run ends, whether it passed or failed"><input type="checkbox" id="scriptDisconnectOnFinish"> Disconnect when done</label>
+          <button id="btnImportSuite" style="display:none">+ Import Suite</button>
+          <button id="btnSaveScript" style="display:none">Save</button>
+          <button class="primary" id="btnRunScript" style="display:none">Run</button>
+          <button class="danger small" id="btnDeleteScript" style="display:none">Delete script</button>
+        </div>
+      </div>
+      <div class="muted" id="scriptImports" style="margin:8px 0"></div>
+      <div id="scriptEmptyHint" class="empty-hint">Select a script on the left, or create one.</div>
+      <div id="scriptEditor" style="height:420px; border:1px solid var(--border); overflow:hidden; display:none;"></div>
+    </div>
+
+    <div class="bottom-panel collapsed" id="scriptBottomPanel">
+      <div class="bottom-panel-tabs">
+        <button class="bp-tab active" data-bp="scriptRunning">Running <span id="scriptRunningProgress" class="muted"></span></button>
+        <button class="bp-tab" data-bp="scriptResults">Results</button>
+        <button class="bp-collapse" id="btnCollapseScriptBottomPanel" title="Collapse/expand">▾</button>
+      </div>
+      <div class="bp-body">
+        <div class="bp-content active" id="bpContentScriptRunning">
+          <div id="scriptRunningCurrent" class="muted" style="margin-bottom:8px; font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div id="scriptRunningScreen">(waiting for screen…)</div>
+        </div>
+        <div class="bp-content" id="bpContentScriptResults">
+          <div id="scriptResultsSummary" class="muted" style="margin-bottom:8px"></div>
+          <table id="scriptResultsTable"><thead></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
@@ -410,6 +457,43 @@
       <button id="replayNext">Next ▸</button>
     </div>
     <div id="replaySteps" class="step-strip"></div>
+  </div>
+</div>
+
+<div class="replay-backdrop" id="projectBackdrop">
+  <div class="replay-modal" style="width:min(480px, 92vw)">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <h2 style="margin:0">Projects</h2>
+      <button class="small" id="projectClose">✕ Close</button>
+    </div>
+    <div class="muted" style="margin-bottom:12px">Each project has its own scenarios, results, and extracted data. One project is active at a time.</div>
+    <div id="projectList"></div>
+    <div class="row" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border-soft)">
+      <input id="newProjectName" autocomplete="off" placeholder="new project name" style="flex:1">
+      <button class="primary small" id="btnNewProject">+ Create &amp; Open</button>
+    </div>
+  </div>
+</div>
+
+<div class="replay-backdrop" id="importSuiteBackdrop">
+  <div class="replay-modal" style="width:min(480px, 92vw)">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <h2 style="margin:0">Import Suite</h2>
+      <button class="small" id="importSuiteClose">✕ Close</button>
+    </div>
+    <div class="muted" style="margin-bottom:12px">Pick a suite to insert an importSuite() call for it at the cursor.</div>
+    <div id="importSuiteList"></div>
+  </div>
+</div>
+
+<div class="replay-backdrop" id="noProjectOverlay">
+  <div class="replay-modal" style="width:min(480px, 92vw); text-align:center">
+    <h2 style="margin:0 0 8px">No project open</h2>
+    <div class="muted" style="margin-bottom:18px">Create a project to hold your scenarios, results, and extracted data.</div>
+    <div class="row" style="justify-content:center">
+      <input id="firstProjectName" autocomplete="off" placeholder="project name" style="flex:1; max-width:220px">
+      <button class="primary" id="btnFirstProject">+ Create Project</button>
+    </div>
   </div>
 </div>
 
@@ -624,23 +708,29 @@ function scenarioFilesForInclude() {
 }
 
 // ---------- activity bar / views ----------
+const SIDEBAR_ID = { terminal: "sidebarTerminal", scenarios: "sidebarScenarios", scripts: "sidebarScripts" };
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", async () => {
     document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     btn.classList.add("active");
     $("view-" + btn.dataset.view).classList.add("active");
-    $("sidebarTerminal").style.display = btn.dataset.view === "terminal" ? "block" : "none";
-    $("sidebarScenarios").style.display = btn.dataset.view === "scenarios" ? "block" : "none";
+    Object.entries(SIDEBAR_ID).forEach(([view, id]) => {
+      $(id).style.display = btn.dataset.view === view ? "block" : "none";
+    });
     if (btn.dataset.view === "terminal") {
       await refreshHeaderStatus();
       if ($("status").classList.contains("connected")) {
         try { renderScreen(await rpc("screen")); } catch (e) {}
       }
     }
+    if (btn.dataset.view === "scripts" && !scriptsLoaded) {
+      scriptsLoaded = true;
+      await loadScriptList();
+    }
   });
 });
-$("sidebar" + (document.querySelector(".tab.active").dataset.view === "terminal" ? "Terminal" : "Scenarios")).style.display = "block";
+$(SIDEBAR_ID[document.querySelector(".tab.active").dataset.view]).style.display = "block";
 
 // ---------- editor tabs (Steps / Variables / Script) ----------
 document.querySelectorAll(".editor-tab").forEach(btn => {
@@ -880,9 +970,6 @@ $("btnRecordSave").addEventListener("click", async () => {
     setRecordingUI("idle");
     document.querySelector('.tab[data-view="scenarios"]').click();
     await new Promise(r => setTimeout(r, 50));
-    $("flowSelect").value = "custom-steps";
-    $("flowSelect").dispatchEvent(new Event("change"));
-    await new Promise(r => setTimeout(r, 200));
     await selectFile(fileName);
   } catch (e) { toast("Error: " + e.message); }
 });
@@ -1204,33 +1291,15 @@ KEYS.forEach(k => {
   keypad.appendChild(b);
 });
 
-// ---------- scenarios: project explorer ----------
+// ---------- scenarios: suite explorer ----------
+// Only one Flow implementation exists (custom-steps) - no picker needed, just use it directly.
 let currentColumns = [];
-let currentFlow = null;
+const currentFlow = "custom-steps";
 let currentFile = null;
-let flowsByName = {};
 let currentFlowFiles = []; // [{name, rows}], refreshed by loadFileList() — feeds "include" target suggestions
 
 async function loadFlows() {
-  const res = await fetch("/api/flows");
-  const json = await res.json();
-  const sel = $("flowSelect");
-  sel.innerHTML = "";
-  json.flows.forEach(f => {
-    flowsByName[f.name] = f;
-    const opt = document.createElement("option");
-    opt.value = f.name; opt.textContent = f.name;
-    sel.appendChild(opt);
-  });
-  if (json.flows.length) selectFlow(json.flows[0].name);
-}
-
-$("flowSelect").addEventListener("change", e => selectFlow(e.target.value));
-
-async function selectFlow(flowName) {
-  currentFlow = flowName;
   currentFile = null;
-  $("flowDesc").textContent = "columns: " + flowsByName[flowName].columns.join(", ");
   clearTable();
   hideBottomPanel();
   await loadFileList();
@@ -1271,7 +1340,7 @@ async function loadFileList() {
   json.files.forEach(f => {
     const item = document.createElement("div");
     item.className = "file-item" + (f.name === currentFile ? " active" : "");
-    item.innerHTML = `<span class="fname">${f.name}</span><span class="fcount">${f.rows}</span>${f.hasScript ? '<span class="fcount" title="has a .js orchestrator" style="color:var(--accent)">JS</span>' : ''}
+    item.innerHTML = `<span class="fname">${f.name}</span><span class="fcount">${f.rows}</span>
       <button class="frename" title="rename">✎</button><button class="frename" title="delete">✕</button>`;
     item.querySelector(".fname").addEventListener("click", () => selectFile(f.name));
     const [renameBtn, deleteBtn] = item.querySelectorAll(".frename");
@@ -1297,7 +1366,6 @@ async function selectFile(name) {
   if (!json.ok) { toast("Error: " + json.error); return; }
   renderScenarioTable(json.rows, json.columns);
   await loadVars();
-  await loadScript();
 }
 
 // ---------- variables: the data-driven grid (${NAME} substitution) ----------
@@ -1387,12 +1455,10 @@ $("btnSaveVars").addEventListener("click", async () => {
   if (json.ok) toast("Saved " + json.count + " row(s)"); else toast("Error: " + json.error);
 });
 
-// ---------- script: the optional <file>.js orchestrator (JsSuiteRunner) ----------
-// Monaco is loaded lazily (only once, on first actual need) via its own AMD loader.js, vendored
-// locally under /vendor/monaco-editor - never CDN-fetched, matching how everything else in this
-// GUI is self-hosted. addExtraLib() feeds it the SAME <file>.d.ts VSCode would use, so a variable
-// name typed here suggests the suite's REAL vars (see TypeDeclarations.java), not a generic
-// placeholder - the whole point of regenerating that file on every steps/vars save.
+// ---------- Monaco loader, shared by the Scripts view ----------
+// Loaded lazily (only once, on first actual need) via its own AMD loader.js, vendored locally
+// under /vendor/monaco-editor - never CDN-fetched, matching how everything else in this GUI is
+// self-hosted.
 let monacoReadyPromise = null;
 function ensureMonacoLoaded() {
   if (monacoReadyPromise) return monacoReadyPromise;
@@ -1408,56 +1474,6 @@ function ensureMonacoLoaded() {
   });
   return monacoReadyPromise;
 }
-
-let scriptEditorInstance = null;
-let scriptExtraLibDisposable = null;
-
-async function loadScript() {
-  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`);
-  const json = await res.json();
-  const exists = json.ok && json.exists;
-
-  $("btnAddScript").style.display = exists ? "none" : "inline-block";
-  $("btnSaveScript").style.display = exists ? "inline-block" : "none";
-  $("scriptEmptyHint").style.display = exists ? "none" : "block";
-  $("scriptEditor").style.display = exists ? "block" : "none";
-  if (!exists) return;
-
-  const monaco = await ensureMonacoLoaded();
-  if (!scriptEditorInstance) {
-    scriptEditorInstance = monaco.editor.create($("scriptEditor"), {
-      value: "", language: "javascript", theme: "vs-dark", automaticLayout: true, minimap: { enabled: false }
-    });
-  }
-  // A different suite's globals must never leak into this one's autocomplete - dispose the
-  // previous extra lib before adding the one for whatever file is now selected.
-  if (scriptExtraLibDisposable) { scriptExtraLibDisposable.dispose(); scriptExtraLibDisposable = null; }
-  if (json.declarations) {
-    scriptExtraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
-      json.declarations, "file:///" + currentFile + ".d.ts");
-  }
-  scriptEditorInstance.setValue(json.source || "");
-}
-
-$("btnAddScript").addEventListener("click", async () => {
-  if (!currentFile) { toast("Select or create a file first"); return; }
-  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
-    { method: "PUT", body: JSON.stringify({ source: "" }) });
-  const json = await res.json();
-  if (!json.ok) { toast("Error: " + json.error); return; }
-  toast("Script created");
-  await loadFileList();
-  await loadScript();
-});
-
-$("btnSaveScript").addEventListener("click", async () => {
-  if (!currentFile || !scriptEditorInstance) return;
-  const source = scriptEditorInstance.getValue();
-  const res = await fetch(`/api/scenario-script?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(currentFile)}`,
-    { method: "PUT", body: JSON.stringify({ source }) });
-  const json = await res.json();
-  toast(json.ok ? "Script saved" : "Error: " + json.error);
-});
 
 $("btnNewFile").addEventListener("click", async () => {
   const name = $("newFileName").value.trim();
@@ -1510,11 +1526,283 @@ function clearTable() {
   document.querySelector("#scenarioTable tbody").innerHTML = "";
   document.querySelector("#varsTable thead").innerHTML = "";
   document.querySelector("#varsTable tbody").innerHTML = "";
-  $("btnAddScript").style.display = "none";
-  $("btnSaveScript").style.display = "none";
-  $("scriptEmptyHint").style.display = "block";
-  $("scriptEditor").style.display = "none";
+}
+
+// ---------- scripts: standalone JS orchestrators, decoupled from any one suite ----------
+// A script has no suite of its own (see JsSuiteRunner) - the ONLY way it touches a suite's rows
+// is an explicit importSuite(flow, file) call it makes itself, so there's nothing here that pairs
+// a script to a same-named csv the way the old per-suite Script tab used to.
+let scriptsLoaded = false;
+let currentScript = null;
+let scriptEditorInstance = null;
+let scriptExtraLibDisposable = null;
+
+async function loadScriptList() {
+  const res = await fetch("/api/scripts");
+  const json = await res.json();
+  const list = $("scriptList");
+  list.innerHTML = "";
+  const scripts = json.ok ? (json.scripts || []) : [];
+  if (!scripts.length) {
+    list.innerHTML = '<div class="empty-hint">No scripts yet.<br>Create one above.</div>';
+    return;
+  }
+  scripts.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "file-item" + (s.name === currentScript ? " active" : "");
+    item.innerHTML = `<span class="fname">${escapeHtml(s.name)}</span>
+      <button class="frename" title="delete">✕</button>`;
+    item.querySelector(".fname").addEventListener("click", () => selectScript(s.name));
+    item.querySelector(".frename").addEventListener("click", async (e) => { e.stopPropagation(); await deleteScript(s.name); });
+    list.appendChild(item);
+  });
+}
+
+$("btnNewScript").addEventListener("click", async () => {
+  const name = $("newScriptName").value.trim();
+  if (!name) { toast("Enter a script name"); return; }
+  const res = await fetch("/api/scripts", { method: "POST", body: JSON.stringify({ name }) });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  $("newScriptName").value = "";
+  await loadScriptList();
+  await selectScript(json.name);
+  toast("Created " + json.name);
+});
+
+async function selectScript(name) {
+  currentScript = name;
+  document.querySelectorAll("#scriptList .file-item").forEach(el => {
+    el.classList.toggle("active", el.querySelector(".fname").textContent === name);
+  });
+  $("currentScriptTitle").textContent = "scripts / " + name + ".js";
+  ["btnImportSuite", "btnSaveScript", "btnRunScript", "btnDeleteScript"].forEach(id => $(id).style.display = "inline-block");
+  $("scriptEmptyHint").style.display = "none";
+  $("scriptEditor").style.display = "block";
+  hideScriptBottomPanel();
+
+  const res = await fetch("/api/scripts/source?name=" + encodeURIComponent(name));
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+
+  const monaco = await ensureMonacoLoaded();
+  if (!scriptEditorInstance) {
+    scriptEditorInstance = monaco.editor.create($("scriptEditor"), {
+      value: "", language: "javascript", theme: "vs-dark", automaticLayout: true, minimap: { enabled: false }
+    });
+    scriptEditorInstance.onDidChangeModelContent(() => renderScriptImports(scriptEditorInstance.getValue()));
+  }
+  // Declarations are the same fixed importSuite()/Suite/execute() shape for every script (see
+  // HttpApi.SCRIPT_DECLARATIONS) - no per-script regeneration needed, but still dispose the
+  // previous lib so re-selecting doesn't pile up duplicate registrations under a stale uri.
   if (scriptExtraLibDisposable) { scriptExtraLibDisposable.dispose(); scriptExtraLibDisposable = null; }
+  scriptExtraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+    json.declarations, "file:///" + name + ".d.ts");
+  scriptEditorInstance.setValue(json.source || "");
+  renderScriptImports(json.source || "");
+  await refreshScriptSessionBadge();
+}
+
+// Mirrors HttpApi's IMPORT_SUITE_CALL regex client-side for live-as-you-type feedback - the
+// server re-parses the same pattern fresh on every GET, so the two can never meaningfully drift.
+function renderScriptImports(source) {
+  const re = /importSuite\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/g;
+  const found = [];
+  let m;
+  while ((m = re.exec(source))) found.push(m[1] + "/" + m[2]);
+  $("scriptImports").textContent = found.length
+    ? "Imports: " + found.join(", ")
+    : 'No suites imported yet — use "+ Import Suite" or call importSuite(flow, file) directly.';
+}
+
+$("btnSaveScript").addEventListener("click", async () => {
+  if (!currentScript || !scriptEditorInstance) return;
+  const source = scriptEditorInstance.getValue();
+  const res = await fetch("/api/scripts/source?name=" + encodeURIComponent(currentScript),
+    { method: "PUT", body: JSON.stringify({ source }) });
+  const json = await res.json();
+  toast(json.ok ? "Script saved" : "Error: " + json.error);
+});
+
+async function deleteScript(name) {
+  if (!confirm("Delete script '" + name + "'? This cannot be undone.")) return;
+  const res = await fetch("/api/scripts?name=" + encodeURIComponent(name), { method: "DELETE" });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  if (currentScript === name) {
+    currentScript = null;
+    $("currentScriptTitle").textContent = "No script selected";
+    ["btnImportSuite", "btnSaveScript", "btnRunScript", "btnDeleteScript"].forEach(id => $(id).style.display = "none");
+    $("scriptEmptyHint").style.display = "block";
+    $("scriptEditor").style.display = "none";
+    $("scriptImports").textContent = "";
+  }
+  await loadScriptList();
+  toast("Deleted");
+}
+
+$("btnDeleteScript").addEventListener("click", () => {
+  if (!currentScript) { toast("No script selected"); return; }
+  deleteScript(currentScript);
+});
+
+async function refreshScriptSessionBadge() {
+  const sid = $("scriptSession").value.trim() || "default";
+  const badge = $("scriptSessionBadge");
+  try {
+    const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "sessions" }) });
+    const json = await res.json();
+    const status = json.ok ? json.sessions[sid] : null;
+    if (status === "connected") { badge.textContent = "● " + sid + " connected"; badge.className = "badge connected"; }
+    else { badge.textContent = "○ " + sid + " not connected"; badge.className = "badge disconnected"; }
+  } catch (e) {
+    badge.textContent = "? unknown"; badge.className = "badge";
+  }
+}
+$("scriptSession").addEventListener("change", refreshScriptSessionBadge);
+
+$("btnRunScript").addEventListener("click", async () => {
+  if (!currentScript || !scriptEditorInstance) return;
+  const sid = $("scriptSession").value.trim() || "default";
+  // No blocking check on the session badge here - a script is expected to open its own session
+  // via connect() (the new-script template always does); if it doesn't and none exists, the run
+  // fails with a clear server-side error instead of a client-side guess.
+
+  const source = scriptEditorInstance.getValue();
+  const saveRes = await fetch("/api/scripts/source?name=" + encodeURIComponent(currentScript),
+    { method: "PUT", body: JSON.stringify({ source }) });
+  const saveJson = await saveRes.json();
+  if (!saveJson.ok) { toast("Error saving before run: " + saveJson.error); return; }
+
+  const startRes = await fetch("/api/scripts/run", {
+    method: "POST",
+    body: JSON.stringify({ name: currentScript, sessionId: sid, disconnectOnFinish: $("scriptDisconnectOnFinish").checked })
+  });
+  const startJson = await startRes.json();
+  if (!startJson.ok) { toast("Error: " + startJson.error); return; }
+
+  $("btnRunScript").disabled = true;
+  showScriptBottomPanel("scriptRunning");
+  pollScriptRun(startJson.runId, sid);
+});
+
+function showScriptBottomPanel(tab) {
+  $("scriptBottomPanel").classList.remove("collapsed");
+  document.querySelectorAll("#scriptBottomPanel .bp-tab").forEach(b => b.classList.toggle("active", b.dataset.bp === tab));
+  document.querySelectorAll("#scriptBottomPanel .bp-content").forEach(c => {
+    c.classList.toggle("active", c.id === "bpContent" + tab.charAt(0).toUpperCase() + tab.slice(1));
+  });
+}
+function hideScriptBottomPanel() { $("scriptBottomPanel").classList.add("collapsed"); }
+document.querySelectorAll("#scriptBottomPanel .bp-tab").forEach(btn => {
+  btn.addEventListener("click", () => showScriptBottomPanel(btn.dataset.bp));
+});
+$("btnCollapseScriptBottomPanel").addEventListener("click", () => {
+  $("scriptBottomPanel").classList.toggle("collapsed");
+});
+
+function pollScriptRun(runId, sid) {
+  const timer = setInterval(async () => {
+    const [statusRes, screenRes] = await Promise.all([
+      fetch("/api/scenarios/run-status?runId=" + encodeURIComponent(runId)),
+      fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "screen", sessionId: sid }) })
+    ]);
+    const status = await statusRes.json();
+    $("scriptRunningProgress").textContent = status.status === "running" ? "running…" : "";
+    $("scriptRunningCurrent").textContent = status.current ? "▸ " + status.current : "";
+    const screen = await screenRes.json();
+    if (screen.ok && screen.text) {
+      let lines = [];
+      for (let r = 0; r < screen.rows; r++) {
+        lines.push(String(r + 1).padStart(3, " ") + " | " + screen.text.slice(r * screen.cols, (r + 1) * screen.cols).replace(/\s+$/, ""));
+      }
+      $("scriptRunningScreen").textContent = lines.join("\n");
+    }
+    if (status.status !== "running") {
+      clearInterval(timer);
+      $("btnRunScript").disabled = false;
+      if (status.status === "error") toast("Run failed: " + status.error);
+      else renderScriptResults(status.results);
+    }
+  }, 700);
+}
+
+// Same row shape as renderResults() (checks/extracted/replay), just targeting the Scripts view's
+// own results table - a script run is still exactly one ScenarioResult under the hood.
+function renderScriptResults(results) {
+  showScriptBottomPanel("scriptResults");
+  const passed = results.filter(r => r.passed).length;
+  $("scriptResultsSummary").textContent = `${passed} / ${results.length} passed`;
+  const thead = document.querySelector("#scriptResultsTable thead");
+  const tbody = document.querySelector("#scriptResultsTable tbody");
+  thead.innerHTML = "<tr><th>Result</th><th>Row</th><th>Checks</th><th>Extracted</th><th></th></tr>";
+  tbody.innerHTML = "";
+  results.forEach(r => {
+    const tr = document.createElement("tr");
+    const rowText = Object.entries(r.row || {}).map(([k, v]) => `${k}=${v}`).join(", ");
+    const checksText = (r.checks || []).map(c =>
+      `${c.name}: expected "${c.expected}" got "${c.actual}" ${c.passed ? "✓" : "✗"}`
+    ).join(" | ") + (r.error ? " ERROR: " + r.error : "");
+    const extractedText = Object.entries(r.extracted || {})
+      .map(([k, v]) => Array.isArray(v) ? `${k}=[${v.length} rows: ${v.join(" | ")}]` : `${k}=${v}`).join(", ");
+    tr.innerHTML = `<td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? "PASS" : "FAIL"}</td>
+      <td>${rowText}</td><td>${checksText}</td><td>${extractedText}</td><td></td>`;
+    if (r.steps && r.steps.length) {
+      const btn = document.createElement("button");
+      btn.className = "replay-link";
+      btn.textContent = "▶ Replay (" + r.steps.length + ")";
+      btn.addEventListener("click", () => openReplay(r.steps, rowText));
+      tr.lastElementChild.appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------- "+ Import Suite" picker: makes importing a suite a click, not something you have to
+// know to type - lists every real suite on disk right now and inserts the exact call for it. ----------
+$("btnImportSuite").addEventListener("click", async () => {
+  const res = await fetch("/api/suites");
+  const json = await res.json();
+  const list = $("importSuiteList");
+  list.innerHTML = "";
+  const suites = json.ok ? (json.suites || []) : [];
+  if (!suites.length) {
+    list.innerHTML = '<div class="empty-hint">No suites yet — create one in the Suites tab first.</div>';
+  }
+  suites.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "file-item";
+    row.innerHTML = `<span class="fname">${escapeHtml(s.flow)}/${escapeHtml(s.file)}</span>`;
+    row.addEventListener("click", () => insertImportSuite(s.flow, s.file));
+    list.appendChild(row);
+  });
+  $("importSuiteBackdrop").classList.add("show");
+});
+$("importSuiteClose").addEventListener("click", () => $("importSuiteBackdrop").classList.remove("show"));
+
+async function insertImportSuite(flow, file) {
+  $("importSuiteBackdrop").classList.remove("show");
+  if (!scriptEditorInstance) return;
+  const monaco = await ensureMonacoLoaded();
+  const varName = suggestIdentifier(file);
+  const line = `const ${varName} = importSuite(${JSON.stringify(flow)}, ${JSON.stringify(file)});\n`;
+  const pos = scriptEditorInstance.getPosition();
+  scriptEditorInstance.executeEdits("import-suite", [{
+    range: new monaco.Range(pos.lineNumber, 1, pos.lineNumber, 1),
+    text: line
+  }]);
+  renderScriptImports(scriptEditorInstance.getValue());
+  scriptEditorInstance.focus();
+}
+
+/** A suite's file name becomes the suggested local variable name for the inserted "const X =
+ * importSuite(...)" line - non-identifier characters replaced with underscores, a leading digit
+ * gets an underscore prefix. Purely a naming convenience; unlike the old per-suite auto-bound
+ * global this replaced, the script is free to rename it however it likes right after inserting. */
+function suggestIdentifier(name) {
+  let s = name.replace(/[^A-Za-z0-9_]/g, "_");
+  if (!s || /^[0-9]/.test(s)) s = "_" + s;
+  return s;
 }
 
 function renderScenarioTable(rows, columns) {
@@ -1775,8 +2063,83 @@ function renderResults(results) {
   });
 }
 
+// ---------- project workspace ----------
+
+async function loadProjectBar() {
+  const res = await fetch("/api/projects/current");
+  const json = await res.json();
+  const btn = $("btnProjectSwitch");
+  if (json.project) {
+    btn.textContent = "▣ " + json.project.name;
+    $("noProjectOverlay").classList.remove("show");
+    return true;
+  }
+  btn.textContent = "· no project ·";
+  $("noProjectOverlay").classList.add("show");
+  return false;
+}
+
+async function openProjectModal() {
+  const res = await fetch("/api/projects");
+  const json = await res.json();
+  const list = $("projectList");
+  list.innerHTML = "";
+  if (!json.projects.length) {
+    list.innerHTML = '<div class="empty-hint">No projects yet — create one below.</div>';
+  }
+  json.projects.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "file-item";
+    row.innerHTML = `<span class="fname">${p.name}</span><span class="fcount">${p.path}</span>`;
+    row.addEventListener("click", () => openProject(p.name));
+    list.appendChild(row);
+  });
+  $("projectBackdrop").classList.add("show");
+}
+
+async function createProject(name, inputEl) {
+  if (!name || !name.trim()) return;
+  const res = await fetch("/api/projects", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  if (inputEl) inputEl.value = "";
+  $("projectBackdrop").classList.remove("show");
+  await afterProjectSwitch();
+}
+
+async function openProject(name) {
+  const res = await fetch("/api/projects/open", { method: "POST", body: JSON.stringify({ name }) });
+  const json = await res.json();
+  if (!json.ok) { toast("Error: " + json.error); return; }
+  $("projectBackdrop").classList.remove("show");
+  await afterProjectSwitch();
+}
+
+/** Re-syncs everything project-scoped after a create/open/switch, so the Scenarios explorer
+ * never shows stale data left over from whichever project was active before. */
+async function afterProjectSwitch() {
+  await loadProjectBar();
+  currentFile = null;
+  clearTable();
+  hideBottomPanel();
+  await loadFlows();
+  currentScript = null;
+  if (scriptsLoaded) await loadScriptList();
+  toast("Project switched");
+}
+
+$("btnProjectSwitch").addEventListener("click", openProjectModal);
+$("projectClose").addEventListener("click", () => $("projectBackdrop").classList.remove("show"));
+$("btnNewProject").addEventListener("click", () => createProject($("newProjectName").value, $("newProjectName")));
+$("newProjectName").addEventListener("keydown", e => { if (e.key === "Enter") createProject(e.target.value, e.target); });
+$("btnFirstProject").addEventListener("click", () => createProject($("firstProjectName").value, $("firstProjectName")));
+$("firstProjectName").addEventListener("keydown", e => { if (e.key === "Enter") createProject(e.target.value, e.target); });
+
 // ---------- init ----------
-loadFlows();
+(async () => {
+  const hasProject = await loadProjectBar();
+  if (hasProject) await loadFlows();
+})();
 </script>
 </body>
 </html>

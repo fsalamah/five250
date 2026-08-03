@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+row1,1,type,"20,7",WRKACTJOB,
+row1,2,key,,ENTER,
+row1,3,check,row:1,,Work with Active Jobs
+row1,4,key,,F3,
+row2,1,type,"20,7",WRKSPLF,
+row2,2,key,,ENTER,
+row2,3,check,row:1,,NOPE THIS SHOULD FAIL
+row2,4,key,,F3,

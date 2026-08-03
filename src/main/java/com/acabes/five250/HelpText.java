@@ -146,7 +146,7 @@ public final class HelpText {
         ENTRIES.put("run-suite", new Entry(
             "Run a scenario CSV from the command line (e.g. from CI)",
             "five250 run-suite --flow <flow> --file <file> [--session <id>] [--var NAME=VALUE ...] "
-                + "[--data-csv <path>] [--disconnect-on-finish] [--timeout <sec>]",
+                + "[--data-csv <path>] [--disconnect-on-finish] [--timeout <sec>] [--project <name>]",
             "Starts the run in the background daemon exactly like clicking Run All in the GUI, "
                 + "then polls and prints each step as it executes, followed by PASS/FAIL and a "
                 + "summary. Exits 0 if every scenario passed, 1 if any failed, 2 on a run error, "
@@ -159,7 +159,12 @@ public final class HelpText {
                 + "--disconnect-on-finish closes the session when the run ends, pass or fail (or "
                 + "even a run error) — same option as the GUI's \"Disconnect when done\" checkbox; "
                 + "off by default, so a suite with no disconnect step of its own leaves the session "
-                + "exactly as it left it.",
+                + "exactly as it left it. --project pins which project workspace this run reads its "
+                + "scenario/vars from and writes results/extracted/replays to, for this invocation "
+                + "only — it does not change the daemon's active project. Omit it and the run uses "
+                + "whichever project is currently active (see `five250 project current`), which is "
+                + "risky for CI if someone else can switch projects in the GUI; always pass --project "
+                + "explicitly in an unattended/CI context.",
             List.of(
                 "--flow                  Flow name, e.g. custom-steps",
                 "--file                  Scenario file name (no .csv), e.g. self-contained-signon",
@@ -167,12 +172,37 @@ public final class HelpText {
                 "--var                   NAME=VALUE, repeatable. Overrides that name's saved variable value",
                 "--data-csv              Path to a CSV of variable sets; runs once per row, aggregates PASS/FAIL",
                 "--disconnect-on-finish  Close the session when the run ends, regardless of PASS/FAIL",
-                "--timeout               Seconds to wait for the run to finish before giving up. Default 300"
+                "--timeout               Seconds to wait for the run to finish before giving up. Default 300",
+                "--project               Project workspace name to run against, for this call only. Default: whatever's currently active"
             ),
             List.of(
                 "five250 run-suite --flow custom-steps --file self-contained-signon",
                 "five250 run-suite --flow run-command --file variable-demo --var CMD1=WRKSPLF --var TITLE1=\"Work with All Spooled Files\"",
-                "five250 run-suite --flow custom-steps --file recorded --data-csv scenarios/custom-steps/recorded.data.csv"
+                "five250 run-suite --flow custom-steps --file recorded --data-csv scenarios/custom-steps/recorded.data.csv",
+                "five250 run-suite --flow custom-steps --file nightly-smoke --project acme-prod"
+            )
+        ));
+
+        ENTRIES.put("project", new Entry(
+            "Manage project workspaces (list/create/open/current)",
+            "five250 project list\n"
+                + "five250 project create <name>\n"
+                + "five250 project open <name>\n"
+                + "five250 project current",
+            "A project is its own scenarios/results/extracted/docs/samples tree, so separate "
+                + "pieces of work (different customers, environments, or test suites) don't share "
+                + "one implicit folder. Exactly one project is active in the daemon at a time — "
+                + "switching here (or in the GUI's titlebar) changes it for every API caller, CLI "
+                + "included, until changed again. `create` makes a new project under the app's own "
+                + "\"projects/\" folder and immediately opens it. A CI job that must not depend on "
+                + "whatever's currently open in the GUI should pass `--project <name>` directly to "
+                + "`run-suite` instead of relying on this active-project state.",
+            List.of(),
+            List.of(
+                "five250 project list",
+                "five250 project create acme-prod",
+                "five250 project open acme-prod",
+                "five250 project current"
             )
         ));
 

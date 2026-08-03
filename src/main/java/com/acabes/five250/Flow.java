@@ -7,8 +7,8 @@ import java.util.Map;
 /**
  * A named navigation path against a live Terminal. Two shapes:
  *
- * 1. Per-row (the default): each CSV row is one independent scenario, e.g. RunCommandFlow —
- *    the navigation is fixed code, only the values vary per row.
+ * 1. Per-row (the default): each CSV row is one independent scenario, navigation is fixed code
+ *    and only the values vary per row.
  *
  * 2. Grouped (groupColumn() non-null): each scenario is a variable-length SEQUENCE of CSV
  *    rows sharing the same value in the group column, executed in row order — e.g.

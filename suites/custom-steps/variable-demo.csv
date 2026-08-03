@@ -1,0 +1,9 @@
+case,step,action,target,value,expected
+row1,1,type,"20,7",${CMD1},
+row1,2,key,,ENTER,
+row1,3,check,row:1,,${TITLE1}
+row1,4,key,,F3,
+row2,1,type,"20,7",${CMD2},
+row2,2,key,,ENTER,
+row2,3,check,row:1,,${TITLE2}
+row2,4,key,,F3,

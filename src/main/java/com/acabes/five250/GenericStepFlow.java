@@ -19,6 +19,11 @@ import java.util.Set;
  *
  *   case      groups rows into one scenario
  *   step      execution order within a case (numeric)
+ *   id        optional, freeform, unique across the whole file — lets a
+ *             project/scripts/*.js script address a range by name instead of
+ *             raw row position, e.g. mySuite.steps("login", "after-login").
+ *             Blank on most rows; unused by this flow itself (see
+ *             JsSuiteRunner.buildSuiteObject).
  *   action    type | key | check | extract | include | connect | wait | disconnect |
  *             if | else | endif | loop | endloop
  *   target    type: "label:<text>" or "<row>,<col>"
@@ -92,7 +97,7 @@ public final class GenericStepFlow implements Flow {
 
     @Override
     public List<String> csvColumns() {
-        return List.of("case", "step", "action", "target", "value", "expected");
+        return List.of("case", "step", "id", "action", "target", "value", "expected");
     }
 
     @Override
