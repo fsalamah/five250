@@ -553,7 +553,18 @@ public final class HttpApi {
         + "  all(): unknown;\n"
         + "};\n"
         + "/** Loads suites/<flow>/<file>.csv (+ its own .vars.csv) and returns it as a Suite. */\n"
-        + "declare function importSuite(flow: string, file: string): Suite;\n";
+        + "declare function importSuite(flow: string, file: string): Suite;\n"
+        + "/** Writes any JSON-shaped value to extracted/scripts/<this script>.<name>.json -\n"
+        + " *  overwrites on every call, not an append. */\n"
+        + "declare function saveJson(name: string, data: unknown): void;\n"
+        + "/** Writes rows (each a flat object; columns come from the first row's own keys) to\n"
+        + " *  extracted/scripts/<this script>.<name>.csv - overwrites on every call. */\n"
+        + "declare function saveCsv(name: string, rows: Array<{ [column: string]: unknown }>): void;\n"
+        + "/** Read-only - values this run was invoked with (\"five250 run-script <name> --var\n"
+        + " *  NAME=VALUE\", or the GUI's Run dialog). args.MISSING reads as undefined, not an\n"
+        + " *  error. Not the same thing as an imported suite's own .vars - a script has no suite\n"
+        + " *  of its own, and this is supplied from OUTSIDE the script's source, not a CSV. */\n"
+        + "declare const args: { [name: string]: string };\n";
 
     /** A new script starts from this template rather than empty - self-contained by default:
      * opens its own session, always closes it in a finally (pass or fail), and shows exactly
@@ -695,6 +706,11 @@ public final class HttpApi {
         String name = safeName((String) req.get("name"));
         String sessionId = req.getOrDefault("sessionId", "default").toString();
         boolean disconnectOnFinish = Boolean.TRUE.equals(req.get("disconnectOnFinish"));
+        Map<String, String> scriptArgs = new LinkedHashMap<>();
+        Object rawArgs = req.get("args");
+        if (rawArgs instanceof Map) {
+            ((Map<?, ?>) rawArgs).forEach((k, v) -> scriptArgs.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
+        }
 
         try {
             ProjectRegistry.Project project = resolveProject(req);
@@ -705,6 +721,7 @@ public final class HttpApi {
             }
             String jsSource = java.nio.file.Files.readString(scriptFile.toPath());
             File suitesRoot = new File(project.root, "suites");
+            File extractedRoot = new File(project.root, "extracted");
 
             String runId = runTracker.start(1);
             RunTracker.RunState state = runTracker.get(runId);
@@ -712,7 +729,7 @@ public final class HttpApi {
             new Thread(() -> {
                 Progress.set(desc -> state.current = desc);
                 try {
-                    ScenarioResult r = JsSuiteRunner.run(sessionService, sessionId, name, suitesRoot, jsSource);
+                    ScenarioResult r = JsSuiteRunner.run(sessionService, sessionId, name, suitesRoot, extractedRoot, jsSource, scriptArgs, state.console::add);
                     state.results.add(r.toMap());
                     state.current = "";
                     writeRunArtifacts(project, "scripts", name, List.of(r));
@@ -790,7 +807,7 @@ public final class HttpApi {
     }
 
     /** Strips path separators and traversal so file names can't escape the scenarios directory. */
-    private static String safeName(String name) {
+    static String safeName(String name) {
         if (name == null || name.isBlank()) throw new IllegalArgumentException("name is required");
         String cleaned = name.trim().replaceAll("[\\\\/]", "_").replace("..", "_");
         if (cleaned.isBlank()) throw new IllegalArgumentException("invalid name");

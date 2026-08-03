@@ -23,6 +23,72 @@ with `FIVE250_HOME` if you want that elsewhere). Copy `five250.jar` +
 unchanged — verified live by running it from a completely unrelated
 directory.
 
+**No-Java-required distribution** (`target/dist/` after `mvn verify` —
+**not** `mvn package`; the antrun execution that builds it is bound to
+the `verify` phase specifically so it always runs after both `shade` and
+a release build's `proguard` step regardless of plugin declaration order
+— `mvn package` alone stops one phase too early and silently leaves
+`target/dist/` stale or missing). A `maven-antrun-plugin` execution
+`jlink`s a trimmed custom JRE (just the modules this app
+actually needs — `java.base,java.desktop,java.prefs,java.sql,java.logging,
+java.naming,jdk.httpserver,jdk.internal.vm.ci,jdk.jfr,jdk.management,
+jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki` — the bulk from `jdeps
+--print-module-deps` against the shaded jar, plus a few added by hand for
+GraalVM/Truffle's own reflective needs jdeps' static analysis can't see)
+into `target/dist/runtime/`, sits `five250.jar` next to it, and copies in
+both launcher scripts (`packaging/five250.bat`, `packaging/five250.sh` —
+`java -jar` against `runtime\bin\java(.exe)` next to the script, never
+whatever Java happens to be on the machine's PATH) plus `CLAUDE.md` and
+the bash completion script. Copy `target/dist/` anywhere on a machine of
+the **same OS/architecture it was built on** and it runs with zero Java
+install — verified live: killed every `java` process on this machine,
+copied `target/dist/` to an unrelated temp directory, ran `five250.sh`
+from there, confirmed via `Get-Process` that the resulting daemon's
+`java.exe` resolved to that copy's own `runtime\bin\`, then ran a real
+script (GraalJS `importSuite`/`execute`, a live socket connect to
+pub400.com, `console.log`) through it end-to-end successfully.
+
+`jlink` needs a FULL JDK (one with a `jmods/` directory) on `JAVA_HOME`
+when you run `mvn package` — a JRE-only or already-`jlink`'d custom
+runtime can't `jlink` a new one from itself (this bit in practice: this
+machine's default `JAVA_HOME` at one point pointed at a Katalon-bundled
+runtime with no `jmods/`); the antrun target fails fast with a clear
+message naming `${java.home}` if that directory's missing, rather than
+failing deep inside the `jlink` invocation.
+
+`jlink` itself is NOT cross-compiling — it only ever produces a runtime
+for the OS/architecture of the JDK you run it from. There's no single
+build that produces all three; `target/dist/` from a Windows `mvn
+verify` only runs on Windows, and the identical Maven goal needs to run
+again on a real macOS box and a real Linux box to produce their own
+`target/dist/` (this is why `packaging/five250.sh` exists as a companion
+to `five250.bat` — same launcher logic, POSIX syntax — even though only
+the Windows side has actually been built and run in this repo so far).
+
+**Obfuscation (`mvn verify -Prelease`) — confirmed non-functional, do
+not use.** A `-Prelease` Maven profile exists (`pom.xml`,
+`proguard.pro`) that renames only `com.acabes.five250.*` identifiers via
+ProGuard — the most conservative mode available, everything else
+(GraalVM/Truffle, tn5250j, the JDK) explicitly kept untouched, chosen
+specifically to avoid breaking reflection-heavy code. It still breaks
+it: the resulting jar builds successfully but throws `Only one
+implementation of APIAccess allowed.
+org.graalvm.polyglot.Engine$APIAccessImpl` the instant it runs any
+GraalJS code — i.e. every suite/script run. Confirmed live via two
+independent approaches (the `com.github.wvengen` wrapper plugin, then
+driving `proguard.ProGuard` directly with only JDK jmods as
+`-libraryjars`, no project dependencies at all going into ProGuard) —
+same failure both times, and the shaded jar has no duplicate
+class/service-file entries going in (checked with `unzip -l`), so
+ProGuard's own zip-processing is introducing something Truffle's engine
+bootstrap treats as a second registration, not chased down further. See
+the `-Prelease` profile's own comment block in `pom.xml` for the full
+finding. **A real release build is just `mvn clean verify` — no
+`-Prelease`.** Stop the daemon (or anything else holding
+`target/five250.jar` open) before `mvn clean ...` on Windows, or the
+clean step fails outright ("Failed to delete ...five250.jar") rather
+than silently leaving a stale jar.
+
 **Project workspaces** (`ProjectRegistry.java`): all real data — `suites/`,
 `scripts/`, `results/`, `extracted/`, `docs/samples/` — lives under a
 *project* root, not directly under `Home.DIR`. Exactly one project is active
@@ -326,6 +392,53 @@ target/five250.jar connect ...` call brings both up). Three tabs:
    one back after an `extract`, and uses a real JS `for` loop calling
    `execute()` repeatedly — the JS-native analog of `loop count`.
 
+   **Saving a script's own data** — `saveJson(name, data)` and
+   `saveCsv(name, rows)` write whatever a script computes to
+   `extracted/scripts/<script name>.<name>.json` (or `.csv`), overwriting
+   on every call — separate from the automatic per-run results/extracted
+   dump every run already gets (that's for a suite's own `extract` steps;
+   this is for anything else a script wants to persist, e.g. a summary
+   object it built up across several imported suites). `data` for
+   `saveJson` can be any JSON-shaped JS value — object, array, string,
+   number, boolean, `null`; `rows` for `saveCsv` is an array of flat
+   objects, columns taken from the first row's own keys, same convention
+   `Csv.write` already uses elsewhere. `name` is sanitized the same way a
+   suite/script file name is (`HttpApi.safeName`) so it can't escape
+   `extracted/scripts/` via `../` or a path separator — verified live: a
+   script that tried `saveJson('../../evil', ...)` landed its file safely
+   inside `extracted/scripts/`, not outside it. See
+   `scripts/save-data-demo.js` for a worked example — imports
+   `custom-steps/js_orchestrator_demo`, `execute()`s its login range, then
+   `saveJson`s a summary object and `saveCsv`s a couple of observation
+   rows; run for real against pub400.com and both files' exact on-disk
+   content confirmed to match what the script computed before being
+   written into this doc.
+
+   **Passing arguments into a script from the command line** — `five250
+   run-script <name> --var NAME=VALUE ...` (repeatable, same flag/parser
+   as `run-suite --var`) becomes that run's `args.NAME` inside the
+   script, via the read-only `args` global — a script has no suite of
+   its own, so this is NOT the same channel as a suite's own
+   `${NAME}`/`.vars.csv` substitution; it's how a `.bat`/`.sh` that calls
+   `five250 run-script ...` (or a CI job) hands the script values from
+   outside its own source — which host to hit, which command to type —
+   without editing the script file itself every time.
+   `args.SOME_MISSING_KEY` reads as `undefined`, not an error, so a
+   script can fall back with `args.HOST || 'pub400.com'` to also run
+   fine with no `--var` at all. Same async start/poll/print CLI pattern
+   as `run-suite` (`Cli.runScript`), including streaming the script's
+   `console.log`/`console.error` output as it happens, not just at the
+   end. See `scripts/cli-args-demo.js` for a worked example — verified
+   live three separate ways: `java -jar target/five250.jar run-script
+   cli-args-demo --var HOST=pub400.com --var COMMAND=WRKSPLF` (args
+   flowed through correctly), the same command with no `--var` at all
+   (fell back to its defaults correctly), and — the actual point of
+   building this — through the real jlink'd distribution's own
+   `target/dist/five250.bat run-script cli-args-demo --var HOST=... `
+   `--var COMMAND=...`, confirming a real batch file really can pass
+   arguments into a script as variables end to end, not just through
+   the daemon's HTTP API directly.
+
    **Monaco editor for scripts, right in the GUI** — the Scripts tab has a
    real Monaco editor (the editor VSCode itself is built on, not a
    re-implementation) with **Save**, **Run**, and **+ Import Suite** (opens
@@ -348,6 +461,41 @@ target/five250.jar connect ...` call brings both up). Three tabs:
    else in this GUI is self-hosted. It's a real, meaningful size addition
    (~12MB) to the jar, worth knowing about if that ever matters for
    distribution.
+
+   **Live console output + real screen while a script runs** — the
+   Scripts tab's bottom panel has a dedicated **Console** tab alongside
+   Running/Results, both updating on the same ~700ms poll a suite run's
+   Running panel uses: `console.log`/`console.error` output
+   (`RunTracker.RunState.console`, appended to live by `JsSuiteRunner`'s
+   bound `console` object via an `onLog` callback threaded through `run()`
+   — not just visible in the daemon's own stdout after the fact, and not
+   mixed into the same view as the live screen — a script that logs a lot
+   doesn't crowd out the screen, and vice versa) and, in the Running tab,
+   the actual AS/400 screen rendered the same way the Terminal tab renders
+   it (`screenGridHtml()` — field/cursor-highlighted HTML, not a flat text
+   dump). `console.error` lines get a distinct color. `console.log`'s
+   string formatting is worth knowing about: `Value.toString()` on a
+   GraalJS value is a debug-only representation, NOT guaranteed to return
+   a guest string's actual content — confirmed the hard way, it printed
+   the literal class name `com.oracle.truffle.api.strings.TruffleString`
+   instead of the logged text until `JsSuiteRunner.stringifyForConsole`
+   started extracting each primitive through its own `Value.as...()`
+   accessor (`asString()`/`asBoolean()`/`asLong()`/`asDouble()`) instead
+   of relying on `toString()`.
+
+   **Connected/disconnected is always visible, not just near the Run
+   button** — both the Suites and Scripts tabs show the session badge
+   (`● <sid> connected` / `○ <sid> not connected`) in two places at once,
+   driven by one shared poll so they can't drift out of sync
+   (`applySessionBadge()` in `index.html`): the top toolbar (as before)
+   and now also the Running tab itself, next to the "current step" line —
+   the place you're actually looking while watching a run, useful
+   especially for a self-connecting script, where the badge visibly flips
+   from disconnected to connected the moment its own `connect()` call
+   lands, and back once `disconnect()` runs in its `finally`. Verified
+   live via Playwright: the Running-tab badge showed `● default
+   connected` mid-run and `○ default not connected` both before the run
+   started and after it finished.
 
 3. **A new `Flow` class, for anything the CSV model can't express** — write a
    `Flow` implementation (see `GenericStepFlow.java` for the grouped/

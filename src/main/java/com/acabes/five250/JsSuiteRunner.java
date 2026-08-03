@@ -66,7 +66,19 @@ import java.util.concurrent.TimeoutException;
  *     yet at bind time - throws a clear "call connect() first" style error if there's still no
  *     session by the time a range actually needs to run.
  *   - {@code console.log}/{@code console.error} - bound to stderr, visible alongside Progress
- *     output in the CLI.
+ *     output in the CLI, and (live, as the script runs) in the GUI's Scripts tab Console panel.
+ *   - {@code saveJson(name, data)}/{@code saveCsv(name, rows)} - write a script's own data out to
+ *     extracted/scripts/&lt;this script&gt;.&lt;name&gt;.json or .csv, overwriting on every call -
+ *     see saveJson/saveCsv below for the exact shape each expects, and
+ *     scripts/save-data-demo.js for a worked example. Separate from the automatic per-run
+ *     results/extracted dump every run already gets - this is for whatever a script computes on
+ *     its own that isn't just a suite's "extract" step result.
+ *   - {@code args} - read-only object of values this run was invoked with ({@code five250
+ *     run-script &lt;name&gt; --var NAME=VALUE ...}, or the GUI's Run dialog) - NOT the same
+ *     channel as an imported suite's own {@code .vars} (a script has no suite of its own);
+ *     {@code args.MISSING} reads as {@code undefined}, not an error, so a script can fall back
+ *     with {@code args.HOST || 'pub400.com'} to also run fine with none passed. See
+ *     scripts/cli-args-demo.js for a worked example.
  *
  * Sandboxed with {@code HostAccess.EXPLICIT} (only the specific bound objects/functions are
  * reachable - no arbitrary Java classes) and a denied class lookup (no {@code Java.type(...)});
@@ -102,11 +114,29 @@ final class JsSuiteRunner {
 
     /** @param suitesRoot the active project's suites/ directory - importSuite(flow, file) resolves
      *                    suitesRoot/flow/file.csv (+ file.vars.csv) against it.
+     *  @param extractedRoot the active project's extracted/ directory - saveJson(name, data) and
+     *                    saveCsv(name, rows) write extractedRoot/scripts/<scriptName>.<name>.json
+     *                    (or .csv) against it, the same top-level folder a suite's own "extract"
+     *                    step dumps land in (see GenericStepFlow's doc comment / CLAUDE.md), just
+     *                    under a "scripts" pseudo-flow bucket instead of a real flow name -
+     *                    consistent with how a script's run results/replays already land under
+     *                    that same pseudo-flow (HttpApi.writeRunArtifacts).
      *  @param sessionService/sessionId - which session connect()/disconnect()/execute() act on;
      *                    NOT pre-resolved to a Terminal, since the session may not exist yet at
-     *                    call time (that's the point of connect() existing at all). */
+     *                    call time (that's the point of connect() existing at all).
+     *  @param onLog     called with each console.log/console.error line as the script produces
+     *                    it (in addition to the existing System.out print) - lets a caller stream
+     *                    a script's own log output live, e.g. into a RunTracker.RunState the GUI
+     *                    polls, instead of only being visible in the daemon's own stdout. May be
+     *                    null (no-op) for a caller that doesn't need live streaming.
+     *  @param scriptArgs bound into the script as the read-only `args` global - values this run
+     *                    should use, supplied from outside the script's own source (`five250
+     *                    run-script <name> --var NAME=VALUE`, or the GUI's Run dialog), separate
+     *                    from an imported suite's own .vars (a script has no suite of its own).
+     *                    Empty (not null) for a run that passed none. */
     static ScenarioResult run(SessionService sessionService, String sessionId, String scriptName,
-                               File suitesRoot, String jsSource) {
+                               File suitesRoot, File extractedRoot, String jsSource,
+                               Map<String, String> scriptArgs, java.util.function.Consumer<String> onLog) {
         Map<String, String> summary = new LinkedHashMap<>();
         summary.put("case", scriptName);
         ScenarioResult result = new ScenarioResult(summary);
@@ -125,12 +155,15 @@ final class JsSuiteRunner {
         try {
             Future<Object> future = executor.submit(() -> {
                 Value bindings = context.getBindings("js");
-                bindings.putMember("console", buildConsole());
+                bindings.putMember("console", buildConsole(onLog));
                 bindings.putMember("connect", (ProxyExecutable) args -> connect(sessionService, sessionId, args));
                 bindings.putMember("disconnect", (ProxyExecutable) args -> { sessionService.disconnect(sessionId); return null; });
                 bindings.putMember("execute", (ProxyExecutable) args ->
                     executeRange(sessionService, sessionId, result, scriptName, args));
                 bindings.putMember("importSuite", (ProxyExecutable) args -> importSuite(suitesRoot, args));
+                bindings.putMember("saveJson", (ProxyExecutable) args -> saveJson(extractedRoot, scriptName, args));
+                bindings.putMember("saveCsv", (ProxyExecutable) args -> saveCsv(extractedRoot, scriptName, args));
+                bindings.putMember("args", buildArgs(scriptArgs));
                 return context.eval("js", jsSource);
             });
 
@@ -206,6 +239,83 @@ final class JsSuiteRunner {
             throw new RuntimeException("importSuite: failed to load '" + flow + "/" + file + "': " + e.getMessage());
         }
         return buildSuiteObject(file, rows, vars);
+    }
+
+    /** {@code saveJson(name, data)} - writes any JS value (object, array, string, number,
+     * boolean, null - whatever JSON itself can express) to
+     * extractedRoot/scripts/&lt;scriptName&gt;.&lt;name&gt;.json, pretty-printed via the same
+     * {@link Json#write} used everywhere else in this codebase. `name` is sanitized the same way
+     * a suite/script file name is (HttpApi.safeName) so it can't escape the scripts/ pseudo-flow
+     * bucket via "../" or a path separator. Overwrites on every call - not an append. */
+    private static Object saveJson(File extractedRoot, String scriptName, Value[] args) {
+        if (args.length < 2 || !args[0].isString()) {
+            throw new RuntimeException("saveJson(name, data) needs a string name and a value to save");
+        }
+        String name = HttpApi.safeName(args[0].asString());
+        Object data = toJavaValue(args[1]);
+        File file = new File(extractedRoot, "scripts" + File.separator + scriptName + "." + name + ".json");
+        try {
+            file.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(file.toPath(), Json.write(data));
+        } catch (Exception e) {
+            throw new RuntimeException("saveJson: failed to write '" + name + "': " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** {@code saveCsv(name, rows)} - writes an array of flat objects to
+     * extractedRoot/scripts/&lt;scriptName&gt;.&lt;name&gt;.csv via {@link Csv#write}, header
+     * columns taken from the first row's own keys (same "whatever the first row has" convention
+     * Csv.write already uses elsewhere) - every row should share the same shape. `name` is
+     * sanitized the same way saveJson's is. Overwrites on every call - not an append. */
+    private static Object saveCsv(File extractedRoot, String scriptName, Value[] args) {
+        if (args.length < 2 || !args[0].isString() || !args[1].hasArrayElements()) {
+            throw new RuntimeException("saveCsv(name, rows) needs a string name and an array of row objects");
+        }
+        String name = HttpApi.safeName(args[0].asString());
+        List<Map<String, String>> rows = new ArrayList<>();
+        long len = args[1].getArraySize();
+        for (long i = 0; i < len; i++) {
+            Object converted = toJavaValue(args[1].getArrayElement(i));
+            if (!(converted instanceof Map)) {
+                throw new RuntimeException("saveCsv: row " + i + " is not an object - got: " + converted);
+            }
+            Map<String, String> row = new LinkedHashMap<>();
+            ((Map<?, ?>) converted).forEach((k, v) -> row.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
+            rows.add(row);
+        }
+        File file = new File(extractedRoot, "scripts" + File.separator + scriptName + "." + name + ".csv");
+        try {
+            file.getParentFile().mkdirs();
+            Csv.write(file, rows);
+        } catch (Exception e) {
+            throw new RuntimeException("saveCsv: failed to write '" + name + "': " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** Recursively converts a GraalJS {@link Value} into a plain Java object tree (Map/List/
+     * String/Long/Double/Boolean/null) that {@link Json#write} and saveCsv's row-flattening can
+     * both consume - reading a guest value's own primitives/members/array elements through the
+     * polyglot API is always allowed, regardless of {@code HostAccess.EXPLICIT} (that setting
+     * restricts exposing Java objects TO the guest, not this direction). */
+    private static Object toJavaValue(Value v) {
+        if (v == null || v.isNull()) return null;
+        if (v.isString()) return v.asString();
+        if (v.isBoolean()) return v.asBoolean();
+        if (v.isNumber()) return v.fitsInLong() ? (Object) v.asLong() : (Object) v.asDouble();
+        if (v.hasArrayElements()) {
+            List<Object> list = new ArrayList<>();
+            long len = v.getArraySize();
+            for (long i = 0; i < len; i++) list.add(toJavaValue(v.getArrayElement(i)));
+            return list;
+        }
+        if (v.hasMembers()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            for (String key : v.getMemberKeys()) map.put(key, toJavaValue(v.getMember(key)));
+            return map;
+        }
+        return v.toString();
     }
 
     private static Object executeRange(SessionService sessionService, String sessionId, ScenarioResult result,
@@ -325,15 +435,44 @@ final class JsSuiteRunner {
         throw new RuntimeException("steps(): each argument must be a row number or a string step id, got: " + arg);
     }
 
-    private static ProxyObject buildConsole() {
+    /** Read-only view over this run's CLI/API-supplied `args` map (see run()'s scriptArgs param) -
+     * `args.NAME` reads a value passed in from outside the script's own source; missing keys read
+     * as `undefined`, same as any other JS object, rather than throwing. Assignment throws
+     * deliberately: args are what this run was invoked WITH, not a place for the script to stash
+     * its own state (use a plain `let`/`const` in the script for that). */
+    private static ProxyObject buildArgs(Map<String, String> scriptArgs) {
+        return new ProxyObject() {
+            public Object getMember(String key) {
+                return scriptArgs.get(key);
+            }
+
+            public Object getMemberKeys() {
+                return scriptArgs.keySet().toArray(new String[0]);
+            }
+
+            public boolean hasMember(String key) {
+                return scriptArgs.containsKey(key);
+            }
+
+            public void putMember(String key, Value value) {
+                throw new RuntimeException("cannot assign to args." + key + " - args are read-only, supplied by whatever ran this script");
+            }
+        };
+    }
+
+    private static ProxyObject buildConsole(java.util.function.Consumer<String> onLog) {
         ProxyExecutable log = args -> {
-            System.out.println("[js] " + joinArgs(args));
+            String line = "[js] " + joinArgs(args);
+            System.out.println(line);
             System.out.flush();
+            if (onLog != null) onLog.accept(line);
             return null;
         };
         ProxyExecutable error = args -> {
-            System.out.println("[js:error] " + joinArgs(args));
+            String line = "[js:error] " + joinArgs(args);
+            System.out.println(line);
             System.out.flush();
+            if (onLog != null) onLog.accept(line);
             return null;
         };
         return new ProxyObject() {
@@ -361,8 +500,23 @@ final class JsSuiteRunner {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < args.length; i++) {
             if (i > 0) sb.append(' ');
-            sb.append(args[i].toString());
+            sb.append(stringifyForConsole(args[i]));
         }
         return sb.toString();
+    }
+
+    /** {@link Value#toString()} is a debug-only representation, NOT guaranteed to return a guest
+     * string's actual content - confirmed the hard way: it printed the internal
+     * "com.oracle.truffle.api.strings.TruffleString" class name instead of the logged text for
+     * every plain {@code console.log('some string')} call. Extract each primitive type through
+     * its dedicated {@code Value.as...()} accessor instead; only fall through to {@code
+     * toString()} for something that's neither a primitive nor null (an object/array/function),
+     * where there's no single "the content" to extract anyway. */
+    private static String stringifyForConsole(Value v) {
+        if (v == null || v.isNull()) return "null";
+        if (v.isString()) return v.asString();
+        if (v.isBoolean()) return String.valueOf(v.asBoolean());
+        if (v.isNumber()) return v.fitsInLong() ? String.valueOf(v.asLong()) : String.valueOf(v.asDouble());
+        return v.toString();
     }
 }

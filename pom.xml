@@ -51,6 +51,21 @@
         <version>3.5.1</version>
         <executions>
           <execution>
+            <!-- MUST stay at "package" (shade's own default binding) - it shades the primary jar
+                 that the "jar" packaging's own implicit jar:jar goal produces earlier within this
+                 SAME "package" phase; shade genuinely needs that artifact to already exist, so it
+                 can't be moved to an earlier phase like prepare-package (tried that - "project
+                 main artifact does not exist", since jar:jar hadn't run yet). Within "package"
+                 itself, this main-build plugin list entry correctly runs before profile-injected
+                 ones (proguard, see the release profile below) - confirmed via "mvn -Prelease
+                 help:effective-pom": Maven appends a profile's plugins AFTER the main build's
+                 plugins in the effective POM regardless of where either is written in this file,
+                 so [shade (main list) -> proguard (profile list)] both bound to "package" run in
+                 that order reliably. antrun (jlink/dist assembly, below) is bound to the LATER
+                 "verify" phase instead, specifically so it can't ever land between shade and
+                 proguard the way it did in an earlier version of this file (all three naively
+                 bound to "package" produced shade -> antrun -> proguard - antrun jlink'd the
+                 un-obfuscated jar since proguard hadn't run yet). -->
             <phase>package</phase>
             <goals><goal>shade</goal></goals>
             <configuration>
@@ -63,6 +78,179 @@
           </execution>
         </executions>
       </plugin>
+
+      <!-- Builds target/dist: five250.jar (obfuscated if the "release" profile built one - see
+           below - otherwise the plain shaded jar) + a jlink'd custom JRE (just the modules this
+           app actually needs, per jdeps against the shaded jar, plus a few added by hand for
+           GraalVM/Truffle's own reflective needs that static analysis can't see - verified live,
+           not just assumed, by actually running the CLI/GUI/a real pub400 session against the
+           result) + both launcher scripts - a fully self-contained "copy this folder to any
+           machine, no Java install required" distribution. Bound to "verify" (see the phase-
+           ordering note on the shade execution above) so it always runs after both shade AND a
+           release build's proguard step, regardless of plugin declaration order.
+
+           Requires a FULL JDK (with a jmods/ directory) on JAVA_HOME when running "mvn package" -
+           a JRE-only or already-jlink'd runtime (as this repo's own Maven happened to be
+           configured with at one point - no jmods/, itself a custom-trimmed runtime) can't jlink
+           a new runtime from itself. Point JAVA_HOME at a real JDK 17+ install to build this. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>build-self-contained-dist</id>
+            <phase>verify</phase>
+            <goals><goal>run</goal></goals>
+            <configuration>
+              <target>
+                <fail message="No jmods/ under JAVA_HOME (${java.home}) - point JAVA_HOME at a full JDK 17+ (not a JRE, and not an already-jlink'd custom runtime) to build target/dist.">
+                  <condition>
+                    <not><available file="${java.home}/jmods" type="dir"/></not>
+                  </condition>
+                </fail>
+                <delete dir="${project.build.directory}/dist" quiet="true"/>
+                <mkdir dir="${project.build.directory}/dist"/>
+                <exec executable="${java.home}/bin/jlink" failonerror="true">
+                  <arg value="--module-path"/>
+                  <arg value="${java.home}/jmods"/>
+                  <arg value="--add-modules"/>
+                  <arg value="java.base,java.desktop,java.prefs,java.sql,java.logging,java.naming,jdk.httpserver,jdk.internal.vm.ci,jdk.jfr,jdk.management,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki"/>
+                  <arg value="--output"/>
+                  <arg value="${project.build.directory}/dist/runtime"/>
+                  <arg value="--strip-debug"/>
+                  <arg value="--no-header-files"/>
+                  <arg value="--no-man-pages"/>
+                  <arg value="--compress=2"/>
+                </exec>
+                <!-- release-obfuscated.jar exists only when "-Prelease" ran the proguard step
+                     (bound to "package", between shade's prepare-package and this verify phase) -
+                     pick it if present, else fall back to the plain shaded jar. -->
+                <condition property="dist.source.jar" value="${project.build.directory}/five250-release-obfuscated.jar" else="${project.build.directory}/five250.jar">
+                  <available file="${project.build.directory}/five250-release-obfuscated.jar"/>
+                </condition>
+                <copy file="${dist.source.jar}" tofile="${project.build.directory}/dist/five250.jar"/>
+                <copy file="${project.basedir}/packaging/five250.bat" todir="${project.build.directory}/dist"/>
+                <copy file="${project.basedir}/packaging/five250.sh" todir="${project.build.directory}/dist"/>
+                <copy file="${project.basedir}/CLAUDE.md" todir="${project.build.directory}/dist"/>
+                <copy file="${project.basedir}/five250-completion.bash" todir="${project.build.directory}/dist" failonerror="false"/>
+                <chmod file="${project.build.directory}/dist/five250.sh" perm="755"/>
+                <chmod file="${project.build.directory}/dist/runtime/bin/java" perm="755" failonerror="false"/>
+                <echo>Self-contained distribution built at ${project.build.directory}/dist (from ${dist.source.jar}) - zip that folder and copy it to any machine of this same OS/architecture; no Java install required there.</echo>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- ============================================================================
+         WARNING - CONFIRMED NON-FUNCTIONAL, DO NOT USE FOR A REAL RELEASE.
+         ============================================================================
+         "mvn verify -Prelease" BUILDS SUCCESSFULLY but the resulting jar throws "Only one
+         implementation of APIAccess allowed. org.graalvm.polyglot.Engine$APIAccessImpl" the
+         moment it actually runs any GraalJS code - i.e. every suite/script run, the core of this
+         app. Confirmed live, not assumed from a clean build log, via TWO independent approaches:
+
+           1. com.github.wvengen:proguard-maven-plugin - this wrapper AUTO-ADDS the project's own
+              resolved dependencies (tn5250j, GraalVM/Truffle) as extra -libraryjars on top of
+              them already being embedded in the shaded injar, with no obvious way to turn off.
+              Broke with the error above.
+           2. Driving proguard.ProGuard directly (this profile's current contents, kept as a
+              starting point for future investigation) - passing ONLY the JDK jmods below as
+              -libraryjars, nothing from the project's own dependencies, no duplication at all
+              going into ProGuard. STILL broke with the identical error.
+
+         Rename-only obfuscation (-dontshrink -dontoptimize, only com.acabes.five250.* subject to
+         renaming - see proguard.pro's "-keep class !com.acabes.five250.** { *; }") was
+         deliberately the most conservative mode available, specifically chosen to avoid breaking
+         reflection-heavy GraalVM/Truffle code. It still breaks it. The shaded injar itself has no
+         duplicate class or META-INF/services entries going in (checked directly with `unzip -l`)
+         - so ProGuard's own zip-processing/output-writing pass, even without renaming anything in
+         org.graalvm.*, is introducing something Truffle's engine bootstrap treats as a second
+         registration. Not chased down further - real time investment with no guaranteed payoff;
+         see the conversation history around 2026-08-03 for the full investigation if resuming
+         this. The shipped release build simply omits this profile (plain "mvn verify", no
+         -Prelease) until/unless this gets solved.
+
+         Invokes ProGuard's own main class directly via antrun's <java> task (classpath supplied
+         by this execution's own <dependencies> - proguard-base, resolved onto the Ant task's
+         classpath via Antrun's standard "maven.plugin.classpath" path reference).
+
+         Writes to a DIFFERENT file than the shaded jar (five250-release-obfuscated.jar) - kept
+         as its own artifact rather than an in-place rewrite of five250.jar, both so the plain and
+         obfuscated jars can coexist in target/ and because an earlier in-place attempt (via the
+         wrapper plugin, injar==outjar) hit a hard "Can't rename ...five250.jar" on Windows. -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <dependencies>
+              <dependency>
+                <groupId>com.guardsquare</groupId>
+                <artifactId>proguard-base</artifactId>
+                <version>7.7.0</version>
+              </dependency>
+            </dependencies>
+            <executions>
+              <execution>
+                <id>obfuscate</id>
+                <!-- Strictly before "verify" (the existing build-self-contained-dist execution's
+                     phase, in the main build section above) so the jlink/dist step always has
+                     five250-release-obfuscated.jar available by the time it looks for it -
+                     package < verify is a fixed Maven lifecycle guarantee, not a fragile
+                     same-phase declaration-order assumption. -->
+                <phase>package</phase>
+                <goals><goal>run</goal></goals>
+                <configuration>
+                  <target>
+                    <fail message="No jmods/ under JAVA_HOME (${java.home}) - point JAVA_HOME at a full JDK 17+ to build the release profile.">
+                      <condition>
+                        <not><available file="${java.home}/jmods" type="dir"/></not>
+                      </condition>
+                    </fail>
+                    <delete file="${project.build.directory}/five250-release-obfuscated.jar" quiet="true"/>
+                    <java classname="proguard.ProGuard" fork="true" failonerror="true" classpathref="maven.plugin.classpath">
+                      <arg value="@${project.basedir}/proguard.pro"/>
+                      <arg value="-injars"/>
+                      <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
+                      <arg value="-outjars"/>
+                      <arg value="${project.build.directory}/five250-release-obfuscated.jar"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.base.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.desktop.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.sql.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.prefs.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.logging.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/java.naming.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/jdk.httpserver.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/jdk.unsupported.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/jdk.crypto.ec.jmod"/>
+                      <arg value="-libraryjars"/>
+                      <arg value="${java.home}/jmods/jdk.management.jmod"/>
+                    </java>
+                    <echo>Obfuscated jar built at ${project.build.directory}/five250-release-obfuscated.jar</echo>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

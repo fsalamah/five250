@@ -17,6 +17,10 @@ public final class RunTracker {
         public volatile String current = "";
         public final int total;
         public final List<Object> results = new CopyOnWriteArrayList<>();
+        /** console.log/console.error lines from a running script, in call order - appended live
+         * (see JsSuiteRunner's buildConsole) so the GUI can show them as the script runs, not just
+         * after it finishes. Empty for a plain (non-script) suite run. */
+        public final List<String> console = new CopyOnWriteArrayList<>();
 
         RunState(int total) {
             this.total = total;
@@ -30,6 +34,7 @@ public final class RunTracker {
             m.put("total", total);
             m.put("completed", results.size());
             m.put("results", results);
+            m.put("console", console);
             return m;
         }
     }

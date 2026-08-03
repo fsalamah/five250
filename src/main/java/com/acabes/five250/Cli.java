@@ -47,6 +47,11 @@ public final class Cli {
             return;
         }
 
+        if (args[0].equals("run-script")) {
+            runScript(args);
+            return;
+        }
+
         if (args[0].equals("project")) {
             projectCmd(args);
             return;
@@ -436,6 +441,89 @@ public final class Cli {
         System.out.println();
         System.out.println(passed + " / " + results.size() + " passed");
         return passed == results.size();
+    }
+
+    /** Runs a project/scripts/<name>.js script from the command line, e.g. from a .bat/.sh
+     * calling five250 itself - `--var NAME=VALUE` (same flag/parser as run-suite's, repeatable)
+     * become that run's `args.NAME` inside the script (see JsSuiteRunner's bound `args` global),
+     * NOT a suite's ${NAME} substitution - a script has no suite of its own, so there's no
+     * .vars.csv here to override; this is a separate, script-only channel for "values this run
+     * should use," e.g. which host to hit or which command to type, driven from outside the
+     * script's own source instead of hardcoded in it. */
+    @SuppressWarnings("unchecked")
+    private static void runScript(String[] args) throws Exception {
+        String name = positional(args);
+        Map<String, String> opts = parseOpts(args, 1);
+        Map<String, String> scriptArgs = parseVars(args);
+        String session = opts.getOrDefault("session", "default");
+        long timeoutSec = Long.parseLong(opts.getOrDefault("timeout", "300"));
+        boolean disconnectOnFinish = opts.containsKey("disconnect-on-finish");
+        String project = opts.get("project"); // pins a project for this run only - see resolveProject() in HttpApi
+
+        ensureDaemonRunning();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        body.put("sessionId", session);
+        if (!scriptArgs.isEmpty()) body.put("args", scriptArgs);
+        if (disconnectOnFinish) body.put("disconnectOnFinish", true);
+        if (project != null && !project.isBlank()) body.put("project", project);
+
+        Map<String, Object> startJson = Json.parseObject(httpPost("/api/scripts/run", Json.write(body)));
+        if (!Boolean.TRUE.equals(startJson.get("ok"))) {
+            System.err.println("Error: " + startJson.get("error"));
+            System.exit(2);
+            return;
+        }
+        String runId = (String) startJson.get("runId");
+        System.err.println("Running script " + name
+            + (scriptArgs.isEmpty() ? "" : " with args " + scriptArgs) + " ...");
+
+        long deadline = System.currentTimeMillis() + timeoutSec * 1000;
+        Map<String, Object> status;
+        String lastCurrent = "";
+        List<Object> printedConsole = new java.util.ArrayList<>();
+        while (true) {
+            status = Json.parseObject(httpGet("/api/scenarios/run-status?runId=" + URLEncoder.encode(runId, StandardCharsets.UTF_8)));
+            String current = String.valueOf(status.getOrDefault("current", ""));
+            if (!current.isEmpty() && !current.equals(lastCurrent)) {
+                System.err.println("  " + current);
+                lastCurrent = current;
+            }
+            List<Object> console = (List<Object>) status.getOrDefault("console", List.of());
+            for (int i = printedConsole.size(); i < console.size(); i++) System.err.println("  " + console.get(i));
+            printedConsole = console;
+            if (!"running".equals(status.get("status"))) break;
+            if (System.currentTimeMillis() > deadline) {
+                System.err.println("Timed out after " + timeoutSec + "s waiting for the run to finish");
+                System.exit(3);
+                return;
+            }
+            Thread.sleep(500);
+        }
+
+        if ("error".equals(status.get("status"))) {
+            System.err.println("Run failed: " + status.get("error"));
+            System.exit(2);
+            return;
+        }
+
+        List<Object> results = (List<Object>) status.get("results");
+        int passed = 0;
+        for (Object o : results) {
+            Map<String, Object> r = (Map<String, Object>) o;
+            boolean ok = Boolean.TRUE.equals(r.get("passed"));
+            if (ok) passed++;
+            System.out.println((ok ? "PASS" : "FAIL") + "  " + r.get("row"));
+            Map<String, Object> extracted = (Map<String, Object>) r.get("extracted");
+            if (extracted != null && !extracted.isEmpty()) {
+                for (Map.Entry<String, Object> e : extracted.entrySet()) System.out.println("    " + e.getKey() + " = " + e.getValue());
+            }
+            if (r.get("error") != null) System.out.println("    ERROR: " + r.get("error"));
+        }
+        System.out.println();
+        System.out.println(passed + " / " + results.size() + " passed");
+        System.exit(passed == results.size() ? 0 : 1);
     }
 
     private static Map<String, String> parseVars(String[] args) {

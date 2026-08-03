@@ -183,6 +183,37 @@ public final class HelpText {
             )
         ));
 
+        ENTRIES.put("run-script", new Entry(
+            "Run a project/scripts/<name>.js script from the command line",
+            "five250 run-script <name> [--session <id>] [--var NAME=VALUE ...] "
+                + "[--disconnect-on-finish] [--timeout <sec>] [--project <name>]",
+            "Same async start/poll/print pattern as run-suite: starts the script in the "
+                + "background daemon (same call the GUI's Scripts tab Run button makes), then "
+                + "polls and prints its current step plus any console.log/console.error output "
+                + "as it happens, followed by PASS/FAIL and a summary. Exits 0/1/2/3 same as "
+                + "run-suite (pass/fail/run-error/timeout) - safe as a CI gate. --var here is "
+                + "NOT the same thing as run-suite's --var: a script has no suite of its own, so "
+                + "there's no saved ${NAME}/.vars.csv to override - instead each --var becomes "
+                + "that run's args.NAME inside the script (see the `args` global in the Scripts "
+                + "tab's editor autocomplete), a way to hand the script values from outside its "
+                + "own source (which host to hit, which command to type) without editing the "
+                + "script file itself every time. --disconnect-on-finish/--project work exactly "
+                + "like run-suite's.",
+            List.of(
+                "<name>                  Script name (no .js), e.g. save-data-demo",
+                "--session               Session id to run against. Default 'default'",
+                "--var                   NAME=VALUE, repeatable. Becomes args.NAME inside the script",
+                "--disconnect-on-finish  Close the session when the run ends, regardless of PASS/FAIL",
+                "--timeout               Seconds to wait for the run to finish before giving up. Default 300",
+                "--project               Project workspace name to run against, for this call only. Default: whatever's currently active"
+            ),
+            List.of(
+                "five250 run-script save-data-demo",
+                "five250 run-script cli-args-demo --var HOST=pub400.com --var COMMAND=WRKSPLF",
+                "five250 run-script nightly-report --disconnect-on-finish --project acme-prod"
+            )
+        ));
+
         ENTRIES.put("project", new Entry(
             "Manage project workspaces (list/create/open/current)",
             "five250 project list\n"
