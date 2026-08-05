@@ -178,7 +178,7 @@ public final class GenericStepFlow implements Flow {
     private static final int MAX_LOOP_COUNT = 500;
 
     @Override
-    public ScenarioResult runGroup(Terminal t, String caseId, List<Map<String, String>> steps) {
+    public ScenarioResult runGroup(Terminal t, String caseId, List<Map<String, String>> steps, Map<String, String> vars, long stepDelayMs) {
         Map<String, String> summary = new LinkedHashMap<>();
         summary.put("case", caseId);
         summary.put("steps", String.valueOf(steps.size()));
@@ -198,7 +198,11 @@ public final class GenericStepFlow implements Flow {
                     throw new RuntimeException("case '" + caseId + "' exceeded " + MAX_STEP_VISITS
                         + " step executions — likely an infinite loop");
                 }
-                Map<String, String> row = ordered.get(i);
+                // Substituted fresh for EACH step, against vars as they stand RIGHT NOW - not
+                // once for the whole file up front - so an "extract" step a few rows back (this
+                // case or an earlier one; vars is shared across the whole run) is already visible
+                // to ${NAME} here. See Flow.runGroup's doc for why this matters.
+                Map<String, String> row = Variables.substitute(ordered.get(i), vars);
                 String action = row.getOrDefault("action", "").trim().toLowerCase();
                 String target = row.getOrDefault("target", "").trim();
                 String value = row.getOrDefault("value", "");
@@ -236,7 +240,7 @@ public final class GenericStepFlow implements Flow {
                     + (target.isEmpty() ? "" : " " + target) + (value.isEmpty() ? "" : " = " + value);
                 Progress.report("case " + caseId + " - " + label);
 
-                StepActions.executeAction(t, result, null, row, stepNo, label);
+                StepActions.executeAction(t, result, vars, row, stepNo, label, stepDelayMs);
                 i++;
             }
         } catch (Exception e) {

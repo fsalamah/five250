@@ -47,7 +47,10 @@ public final class HttpApi {
         server.createContext("/api/scenario-files", this::handleScenarioFiles);
         server.createContext("/api/scenarios/run-status", this::handleScenariosRunStatus);
         server.createContext("/api/scenarios/run", this::handleScenariosRun);
+        server.createContext("/api/runs/active", this::handleRunsActive);
+        server.createContext("/api/runs/cancel", this::handleRunsCancel);
         server.createContext("/api/scenarios/replay", this::handleScenarioReplay);
+        server.createContext("/api/scenarios/last-run", this::handleScenarioLastRun);
         server.createContext("/api/scenario-vars", this::handleScenarioVars);
         server.createContext("/api/scenario-data", this::handleScenarioData);
         server.createContext("/api/scenarios", this::handleScenarios);
@@ -303,6 +306,20 @@ public final class HttpApi {
                 case "GET": {
                     List<String> columns = Csv.readHeader(file);
                     List<Map<String, String>> rows = Csv.read(file);
+                    // <file>.data.csv (the data-driven grid) doesn't exist for every suite - a
+                    // suite whose vars were only ever written directly to <file>.vars.csv
+                    // (hand-authored, or via the GUI's "save extracted vars as defaults" on
+                    // Save-as-suite) has real values there with no matching .data.csv at all.
+                    // Rather than show an empty grid, synthesize a one-column-per-variable,
+                    // one-row grid straight from vars.csv - same shape the grid would produce if
+                    // you'd entered those same values by hand as a single value set.
+                    if (columns.isEmpty()) {
+                        Map<String, String> vars = Variables.load(varsFile(flowName, fileName));
+                        if (!vars.isEmpty()) {
+                            columns = new ArrayList<>(vars.keySet());
+                            rows = List.of(vars);
+                        }
+                    }
                     sendJson(ex, 200, Map.of("ok", true, "columns", columns, "rows", rows));
                     return;
                 }
@@ -338,6 +355,10 @@ public final class HttpApi {
         String fileName = safeName((String) req.get("file"));
         String sessionId = req.getOrDefault("sessionId", "default").toString();
         boolean disconnectOnFinish = Boolean.TRUE.equals(req.get("disconnectOnFinish"));
+        // Configurable gap held after each step - see StepActions.executeAction's doc. Optional;
+        // defaults to DEFAULT_STEP_DELAY_MS (200ms) when the caller doesn't specify one.
+        long stepDelayMs = req.get("stepDelayMs") instanceof Number
+            ? ((Number) req.get("stepDelayMs")).longValue() : StepActions.DEFAULT_STEP_DELAY_MS;
 
         try {
             Flow flow = FlowRegistry.get(flowName);
@@ -353,26 +374,31 @@ public final class HttpApi {
             }
 
             List<Map<String, String>> rows = flow.preprocess(flowDir(project, flowName), rawRows); // splice in any "include" steps
-            rows = Variables.substituteRows(rows, vars); // resolve ${NAME} in every cell
-
-            rows = autoConnectIfNeeded(sessionId, rows); // suite can create its own session via a "connect" step
+            // NOT substituted here - vars is now LIVE and substitution happens per-step, INSIDE
+            // the run (GenericStepFlow.runGroup), so an "extract" step's output is visible to a
+            // ${NAME} reference later in this same run, not just to a later, separate run. See
+            // Flow.runGroup's doc. autoConnectIfNeeded still substitutes its one "connect" row
+            // itself, against vars as they stand right now (nothing could have run yet anyway).
+            rows = autoConnectIfNeeded(sessionId, rows, vars); // suite can create its own session via a "connect" step
             Terminal t = sessionService.getSession(sessionId); // now guaranteed to exist
             final List<Map<String, String>> finalRows = rows;
             int total = ScenarioRunner.countScenarios(flow, finalRows);
 
-            String runId = runTracker.start(total);
+            String runId = runTracker.start(total, sessionId, flowName + "/" + fileName, "suite");
             RunTracker.RunState state = runTracker.get(runId);
 
-            new Thread(() -> {
+            Thread runThread = new Thread(() -> {
                 Progress.set(desc -> state.current = desc);
                 try {
-                    List<ScenarioResult> results = ScenarioRunner.run(flow, t, finalRows,
+                    List<ScenarioResult> results = ScenarioRunner.run(flow, t, finalRows, vars, stepDelayMs,
                         r -> { state.results.add(r.toMap()); state.current = ""; });
                     writeRunArtifacts(project, flowName, fileName, results);
-                    state.status = "done";
+                    if (!state.cancelRequested) state.status = "done";
                 } catch (Throwable e) {
-                    state.status = "error";
-                    state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                    if (!state.cancelRequested) {
+                        state.status = "error";
+                        state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                    }
                 } finally {
                     Progress.clear();
                     // Opt-in: closes the session no matter how the run ended (pass, fail, or even
@@ -384,7 +410,9 @@ public final class HttpApi {
                         try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
                     }
                 }
-            }, "scenario-run-" + runId).start();
+            }, "scenario-run-" + runId);
+            state.thread = runThread;
+            runThread.start();
 
             sendJson(ex, 200, Map.of("ok", true, "runId", runId, "total", total));
         } catch (Throwable e) {
@@ -412,6 +440,8 @@ public final class HttpApi {
         ScenarioRunner.writeFailureDumps(new File(new File(new File(failuresRoot, flowName), fileName), ts), results);
         ScenarioRunner.writeReplays(new File(new File(replaysRoot, flowName), fileName), results);
         ScenarioRunner.writeReplays(new File(new File(new File(replaysRoot, flowName), fileName), ts), results);
+        ScenarioRunner.writeLastRunInfo(new File(new File(replaysRoot, flowName), fileName),
+            LocalDateTime.parse(ts, RUN_TIMESTAMP).toString(), results.size());
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
     }
@@ -423,7 +453,7 @@ public final class HttpApi {
      * Either way, strips every row belonging to that row's case, so it never reaches a Flow
      * as an unrecognized action.
      */
-    private List<Map<String, String>> autoConnectIfNeeded(String sessionId, List<Map<String, String>> rows) {
+    private List<Map<String, String>> autoConnectIfNeeded(String sessionId, List<Map<String, String>> rows, Map<String, String> vars) {
         Map<String, String> connectRow = null;
         for (Map<String, String> row : rows) {
             if ("connect".equalsIgnoreCase(row.getOrDefault("action", "").trim())) {
@@ -432,6 +462,10 @@ public final class HttpApi {
             }
         }
         if (connectRow == null) return rows;
+        // Rows reaching here are no longer pre-substituted whole-file (see handleScenariosRun) -
+        // this is the one row read before any step has actually run, so substituting it against
+        // vars as they stand right now is equivalent to what the old up-front pass would have done.
+        connectRow = Variables.substitute(connectRow, vars);
 
         // A prior run's own "disconnect" step (GenericStepFlow) closes the Terminal's socket but
         // has no way to deregister it here — leaving a stale, dead entry that map-membership
@@ -481,6 +515,33 @@ public final class HttpApi {
         }
     }
 
+    /** GET /api/runs/active : every currently-running suite/script across all sessions - the side
+     * panel polls this to show "session X is executing suite/script Y" and offer a Kill button. */
+    private void handleRunsActive(HttpExchange ex) throws IOException {
+        try {
+            sendJson(ex, 200, Map.of("ok", true, "runs", runTracker.listActive()));
+        } catch (Throwable e) {
+            sendJson(ex, 200, SessionService.errorResponse(e));
+        }
+    }
+
+    /** POST /api/runs/cancel {runId} : kills a running suite/script - see RunTracker.cancel() for
+     * why this works by force-disconnecting the run's session rather than a cooperative flag. */
+    private void handleRunsCancel(HttpExchange ex) throws IOException {
+        if (!ex.getRequestMethod().equals("POST")) {
+            sendJson(ex, 405, Map.of("ok", false, "error", "POST only"));
+            return;
+        }
+        try {
+            Map<String, Object> req = Json.parseObject(readBody(ex));
+            String runId = String.valueOf(req.get("runId"));
+            boolean cancelled = runTracker.cancel(runId, sessionService);
+            sendJson(ex, 200, Map.of("ok", true, "cancelled", cancelled));
+        } catch (Throwable e) {
+            sendJson(ex, 200, SessionService.errorResponse(e));
+        }
+    }
+
     /** Fetches one persisted replay (step-by-step screen captures) written after a run finished. */
     private void handleScenarioReplay(HttpExchange ex) throws IOException {
         try {
@@ -496,6 +557,32 @@ public final class HttpApi {
             String json = java.nio.file.Files.readString(f.toPath());
             ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
             byte[] withOk = ("{\"ok\":true,\"replay\":" + json + "}").getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, withOk.length);
+            try (OutputStream os = ex.getResponseBody()) {
+                os.write(withOk);
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 400, SessionService.errorResponse(e));
+        }
+    }
+
+    /** {timestamp, count} for whichever run's replay dump is currently sitting in the untimestamped
+     * "latest" directory (see writeRunArtifacts/ScenarioRunner.writeLastRunInfo) - lets the GUI
+     * offer "replay the last run" (and show when it happened) after a page reload or on a suite/
+     * script it never watched run live in this browser at all, not just right after clicking Run. */
+    private void handleScenarioLastRun(HttpExchange ex) throws IOException {
+        try {
+            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+            String flowName = requireParam(query, "flow");
+            String fileName = safeName(requireParam(query, "file"));
+            File f = new File(new File(new File(ProjectRegistry.replaysDir(), flowName), fileName), "last-run.json");
+            if (!f.exists()) {
+                sendJson(ex, 200, Map.of("ok", true, "found", false));
+                return;
+            }
+            String json = java.nio.file.Files.readString(f.toPath());
+            ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            byte[] withOk = ("{\"ok\":true,\"found\":true,\"lastRun\":" + json + "}").getBytes(StandardCharsets.UTF_8);
             ex.sendResponseHeaders(200, withOk.length);
             try (OutputStream os = ex.getResponseBody()) {
                 os.write(withOk);
@@ -552,14 +639,23 @@ public final class HttpApi {
         + "  /** Every row in the suite, in file order - shorthand for steps(1, <row count>). */\n"
         + "  all(): unknown;\n"
         + "};\n"
-        + "/** Loads suites/<flow>/<file>.csv (+ its own .vars.csv) and returns it as a Suite. */\n"
-        + "declare function importSuite(flow: string, file: string): Suite;\n"
+        // importSuite itself is deliberately NOT declared here. index.html's refreshScriptVarsLib
+        // registers it in a separate, per-script extra lib instead, as a set of overloads keyed on
+        // the exact importSuite("flow","file") calls found in the script's own source - one
+        // literal-typed overload per real import (giving named ${NAME} completion on .vars), plus
+        // a final `(flow: string, file: string): Suite` fallback for anything else. All of that has
+        // to live together in one file/declaration group for TypeScript to try the overloads in a
+        // predictable order; splitting the generic signature in here and the specific ones there
+        // previously caused real breakage (see that function's own comment for the postmortem).
         + "/** Writes any JSON-shaped value to extracted/scripts/<this script>.<name>.json -\n"
         + " *  overwrites on every call, not an append. */\n"
         + "declare function saveJson(name: string, data: unknown): void;\n"
         + "/** Writes rows (each a flat object; columns come from the first row's own keys) to\n"
         + " *  extracted/scripts/<this script>.<name>.csv - overwrites on every call. */\n"
         + "declare function saveCsv(name: string, rows: Array<{ [column: string]: unknown }>): void;\n"
+        + "/** Same file/shape as saveCsv, but ADDS to whatever's already there instead of overwriting -\n"
+        + " *  for accumulating one row set per page while paging through a multi-page subfile list. */\n"
+        + "declare function appendCsv(name: string, rows: Array<{ [column: string]: unknown }>): void;\n"
         + "/** Read-only - values this run was invoked with (\"five250 run-script <name> --var\n"
         + " *  NAME=VALUE\", or the GUI's Run dialog). args.MISSING reads as undefined, not an\n"
         + " *  error. Not the same thing as an imported suite's own .vars - a script has no suite\n"
@@ -568,12 +664,13 @@ public final class HttpApi {
 
     /** A new script starts from this template rather than empty - self-contained by default:
      * opens its own session, always closes it in a finally (pass or fail), and shows exactly
-     * where an importSuite() call and its execute() calls go, plus how to log in and how to
-     * carry a value between two different imported suites' vars. Edit or delete any of it
-     * freely - this is a starting point, not an enforced shape. Every claim in these comments
-     * was verified against a real running script before being written here (not just written
-     * and assumed correct) - see suites/custom-steps/signon-common.csv for the login suite
-     * referenced below. */
+     * where an importSuite() call and its execute() calls go, plus every other script global
+     * built up over this project's history: login, id-addressed step ranges, cross-suite
+     * variable hand-off, CLI/GUI args, console output, and saveJson/saveCsv/appendCsv. Edit or
+     * delete any of it freely - this is a starting point, not an enforced shape. Every claim in
+     * these comments was verified against a real running script before being written here (not
+     * just written and assumed correct) - see suites/custom-steps/signon-common.csv and
+     * suites/custom-steps/js_orchestrator_demo.csv for the suites referenced below. */
     private static final String NEW_SCRIPT_TEMPLATE =
         "connect('pub400.com', 23);\n"
         + "try {\n"
@@ -586,6 +683,16 @@ public final class HttpApi {
         + "  // signon.vars.PASSWORD = 'your-pub400-password';\n"
         + "  // execute(signon.all());\n"
         + "\n"
+        + "  // --- Running a range of steps by name instead of row number ---\n"
+        + "  // A suite's CSV can give any row an \"id\" (its own optional id column, free-form\n"
+        + "  // text, unique per file). steps(a, b) takes a row number OR that id string for\n"
+        + "  // either end, mixed freely - so a range survives the suite being edited later\n"
+        + "  // instead of breaking because row numbers shifted. all() is steps(1, <row count>).\n"
+        + "  // suites/custom-steps/js_orchestrator_demo.csv has \"login-start\"..\"after-login\":\n"
+        + "  // const demo = importSuite('custom-steps', 'js_orchestrator_demo');\n"
+        + "  // demo.vars.CMD = 'WRKACTJOB';\n"
+        + "  // execute(demo.steps('login-start', 'after-login'));\n"
+        + "\n"
         + "  // --- Using variables across different suites ---\n"
         + "  // Each importSuite() call returns its OWN .vars map - setting one suite's vars\n"
         + "  // never touches a different suite's, even if both use the same ${NAME}. To carry\n"
@@ -593,6 +700,31 @@ public final class HttpApi {
         + "  // const mySuite = importSuite('custom-steps', '<suite-name>');\n"
         + "  // mySuite.vars.SOME_VAR = signon.vars.USER;   // explicit hand-off, not automatic\n"
         + "  // execute(mySuite.all());\n"
+        + "\n"
+        + "  // --- Reading a value an \"extract\" step (rows:/table: included) just pulled off\n"
+        + "  // the screen --- an extract step inside an executed range writes straight into that\n"
+        + "  // suite's own .vars, readable immediately after the execute() call returns:\n"
+        + "  // console.log('landed on: ' + demo.vars.title);\n"
+        + "\n"
+        + "  // --- Command-line/GUI arguments ---\n"
+        + "  // `five250 run-script <this-script> --var HOST=foo` (or the GUI's Run dialog) makes\n"
+        + "  // args.HOST available here - read-only, a missing key is undefined (not an error),\n"
+        + "  // so `||` gives a sane default for a plain GUI \"Run\" click with no args supplied:\n"
+        + "  // const host = args.HOST || 'pub400.com';\n"
+        + "\n"
+        + "  // --- Console output --- shows up live in the GUI's Scripts tab Console panel (and\n"
+        + "  // on stderr from the CLI) as the script runs, not just after it finishes:\n"
+        + "  // console.log('starting run');\n"
+        + "  // console.error('something worth flagging - still lets the run continue');\n"
+        + "\n"
+        + "  // --- Saving a script's own data --- separate from the automatic per-run\n"
+        + "  // results/extracted dump every run already gets; all three write under\n"
+        + "  // extracted/scripts/<this script name>.<name below>.<json|csv>:\n"
+        + "  // saveJson('summary', { host: host, ranAt: new Date().toISOString() }); // any JSON value, overwrites each call\n"
+        + "  // saveCsv('observations', [{ row: 1, note: 'first' }]);                 // array of flat objects, overwrites each call\n"
+        + "  // appendCsv('pages', [{ page: 1, job: 'QPADEV001' }]);                  // same shape, but ADDS instead of\n"
+        + "  //   overwriting - call this once per page while paging through a multi-page subfile list\n"
+        + "  //   (WRKACTJOB, WRKSPLF, ...) instead of the last page's saveCsv wiping out every earlier one.\n"
         + "} finally {\n"
         + "  disconnect();\n"
         + "}\n";
@@ -608,8 +740,10 @@ public final class HttpApi {
                     if (found != null) {
                         java.util.Arrays.sort(found, java.util.Comparator.comparing(File::getName));
                         for (File f : found) {
+                            String name = f.getName().substring(0, f.getName().length() - 3);
+                            ScriptBatchFiles.writeIfMissing(dir, name); // self-heal a script that predates .bat/.sh generation
                             Map<String, Object> m = new LinkedHashMap<>();
-                            m.put("name", f.getName().substring(0, f.getName().length() - 3));
+                            m.put("name", name);
                             scripts.add(m);
                         }
                     }
@@ -626,6 +760,7 @@ public final class HttpApi {
                     }
                     file.getParentFile().mkdirs();
                     java.nio.file.Files.writeString(file.toPath(), NEW_SCRIPT_TEMPLATE);
+                    ScriptBatchFiles.write(file.getParentFile(), name);
                     sendJson(ex, 200, Map.of("ok", true, "name", name));
                     return;
                 }
@@ -633,6 +768,7 @@ public final class HttpApi {
                     Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
                     String name = safeName(requireParam(query, "name"));
                     scriptFile(name).delete();
+                    ScriptBatchFiles.delete(scriptsDir(), name);
                     sendJson(ex, 200, Map.of("ok", true));
                     return;
                 }
@@ -706,6 +842,8 @@ public final class HttpApi {
         String name = safeName((String) req.get("name"));
         String sessionId = req.getOrDefault("sessionId", "default").toString();
         boolean disconnectOnFinish = Boolean.TRUE.equals(req.get("disconnectOnFinish"));
+        long stepDelayMs = req.get("stepDelayMs") instanceof Number
+            ? ((Number) req.get("stepDelayMs")).longValue() : StepActions.DEFAULT_STEP_DELAY_MS;
         Map<String, String> scriptArgs = new LinkedHashMap<>();
         Object rawArgs = req.get("args");
         if (rawArgs instanceof Map) {
@@ -723,27 +861,31 @@ public final class HttpApi {
             File suitesRoot = new File(project.root, "suites");
             File extractedRoot = new File(project.root, "extracted");
 
-            String runId = runTracker.start(1);
+            String runId = runTracker.start(1, sessionId, name, "script");
             RunTracker.RunState state = runTracker.get(runId);
 
-            new Thread(() -> {
+            Thread runThread = new Thread(() -> {
                 Progress.set(desc -> state.current = desc);
                 try {
-                    ScenarioResult r = JsSuiteRunner.run(sessionService, sessionId, name, suitesRoot, extractedRoot, jsSource, scriptArgs, state.console::add);
+                    ScenarioResult r = JsSuiteRunner.run(sessionService, sessionId, name, suitesRoot, extractedRoot, jsSource, scriptArgs, state.console::add, stepDelayMs);
                     state.results.add(r.toMap());
                     state.current = "";
                     writeRunArtifacts(project, "scripts", name, List.of(r));
-                    state.status = "done";
+                    if (!state.cancelRequested) state.status = "done";
                 } catch (Throwable e) {
-                    state.status = "error";
-                    state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                    if (!state.cancelRequested) {
+                        state.status = "error";
+                        state.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                    }
                 } finally {
                     Progress.clear();
                     if (disconnectOnFinish) {
                         try { sessionService.disconnect(sessionId); } catch (Throwable ignored) {}
                     }
                 }
-            }, "script-run-" + runId).start();
+            }, "script-run-" + runId);
+            state.thread = runThread;
+            runThread.start();
 
             sendJson(ex, 200, Map.of("ok", true, "runId", runId, "total", 1));
         } catch (Throwable e) {

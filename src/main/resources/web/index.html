@@ -67,6 +67,10 @@
      rather than a fixed 420px box - #scriptEditor's own height:420px is dropped in favor of this
      flex-fill (Monaco's automaticLayout:true already handles re-flowing to a resized container). */
   #view-scripts .editor-area { display: flex; flex-direction: column; overflow: hidden; }
+  /* .editor-tab-content's own default (display:block) would stop the active tab from being a flex
+     container, breaking the fill-available-height rule below it - Editor/Running/Console all need
+     to stretch to fill whatever's left above the bottom panel, not just the code editor. */
+  #view-scripts .editor-tab-content.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   #view-scripts #scriptEditor { flex: 1 1 auto; min-height: 160px; width: 100%; }
   .editor-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 10px 0 14px; }
   button.editor-tab {
@@ -105,6 +109,12 @@
   }
   .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .group-label { flex-basis: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+  .toolbar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+  .search-input { background: transparent; border-color: var(--border-soft); color: var(--muted); }
+  .search-input:focus { color: var(--text); }
+  input.case-repeat { opacity: .35; }
+  input.case-repeat:focus { opacity: 1; }
   label { font-size: 12px; color: var(--muted); font-weight: 500; }
   input, select {
     background: #0b0d10; border: 1px solid var(--border); color: var(--text); padding: 7px 9px;
@@ -138,7 +148,11 @@
   th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; background: var(--panel-alt); }
   tbody tr { transition: background .3s var(--silk-ease); }
   tbody tr:hover { background: #1a1e24; }
-  td input { width: 100%; background: transparent; border: none; color: var(--text); padding: 3px 2px; border-radius: 0; }
+  /* min-width:0 overrides the browser's own intrinsic min-width on <input> (based on its default
+     "size" of ~20 characters) - without it, a narrow fixed-layout column (see #scenarioTable) gets
+     forced wider than its allotted % by the input's own floor, pushing the whole table (and the
+     page) past the viewport instead of respecting table-layout:fixed. */
+  td input { width: 100%; min-width: 0; background: transparent; border: none; color: var(--text); padding: 3px 2px; border-radius: 0; }
   td input:focus { background: #0b0d10; box-shadow: 0 0 0 2px rgba(176,184,196,.2); outline: none; }
   .pass { color: var(--green); font-weight: 600; }
   .fail { color: var(--red); font-weight: 600; }
@@ -186,9 +200,24 @@
 
   .badge { font-size: 10px; padding: 3px 10px; border-radius: 0; background: #232830; color: var(--muted); letter-spacing: .05em; }
   .badge.connected { background: #143a22; color: var(--green); }
+  .busy-badge { font-size: 10px; padding: 3px 10px; border-radius: 0; background: #3a2f14; color: #e8b339; letter-spacing: .05em; display: inline-flex; align-items: center; gap: 6px; }
+  .busy-spinner { width: 9px; height: 9px; border: 2px solid #e8b339; border-top-color: transparent; border-radius: 50%; animation: busy-spin .7s linear infinite; }
+  @keyframes busy-spin { to { transform: rotate(360deg); } }
+  .busy-badge.locked { background: #3a1414; color: #ff9b9b; cursor: pointer; }
+  .busy-badge.locked:hover { background: #4a1c1c; }
   .badge.disconnected { background: #3a1f22; color: #ff9b9b; }
-  #runningScreen, #scriptRunningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #050608; color: #6ee06e; padding: 10px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
-  #scriptRunningConsole { font-family: var(--mono); font-size: 12px; line-height: 1.4; background: #050608; color: #c9d1d9; padding: 10px; border-radius: 0; white-space: pre-wrap; word-break: break-word; overflow-x: auto; border: 1px solid var(--border); max-height: 340px; overflow-y: auto; }
+  /* A real 5250 screen is always exactly 24 rows - min-height (not a max-height scrollbox) fits
+     every row without clipping, same treatment as the Terminal tab's own #screen. The old
+     max-height:300px dated from when this lived in the cramped bottom panel; now that Running is
+     a full tab (see #view-scenarios/#view-scripts .editor-tab-content), that cap just cut the
+     bottom rows off instead of ever being needed. */
+  #runningScreen, #scriptRunningScreen { font-family: var(--mono); font-size: 12px; line-height: 1.3; background: #050608; color: #6ee06e; padding: 10px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border); min-height: 340px; flex: 1 1 auto; }
+  /* The Running tab (Suites and Scripts both) is a flex column so #runningScreen/#scriptRunningScreen's
+     flex:1 1 auto above actually has a flex container to grow within - fills whatever's left below
+     the current-step/kill/badge row instead of stopping at its 340px floor on a tall window. */
+  #view-scenarios #tabContentRunning.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #view-scripts #tabContentScriptRunning.active { flex: 1 1 auto; }
+  #scriptRunningConsole { font-family: var(--mono); font-size: 12px; line-height: 1.4; background: #050608; color: #c9d1d9; padding: 10px; border-radius: 0; white-space: pre-wrap; word-break: break-word; overflow-x: auto; border: 1px solid var(--border); min-height: 340px; max-height: 60vh; overflow-y: auto; }
   #scriptRunningConsole .console-error { color: #ff9b9b; }
   #btnRecordToggle.active { background: var(--red); border-color: var(--red); color: white; animation: recordPulse 1.5s ease-in-out infinite; }
   @keyframes recordPulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
@@ -232,10 +261,18 @@
   .step-strip.not-clickable .step-chip { cursor: default; }
 
   #terminalScreenPanel { position: relative; }
-  #btnSelectArea.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color: transparent; color: #0F1115; }
+  #btnExtractArea.active, #btnExtractTable.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-color: transparent; color: #0F1115; }
   #areaSelectOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(176,184,196,.18); pointer-events: none; z-index: 10; }
   #areaSelectOverlay.locked { border-style: solid; border-color: #ffcf5c; background: rgba(255,207,92,.22); }
+  #areaSelectLabel { position: absolute; z-index: 11; pointer-events: none; font-family: var(--mono); font-size: 11px; background: #0F1115; color: var(--accent); border: 1px solid var(--accent); padding: 2px 6px; white-space: nowrap; }
+  #replayAreaOverlay { position: absolute; border: 2px dashed var(--accent); background: rgba(176,184,196,.18); pointer-events: none; z-index: 10; }
+  #replayAreaLabel { position: absolute; z-index: 11; pointer-events: none; font-family: var(--mono); font-size: 11px; background: #0F1115; color: var(--accent); border: 1px solid var(--accent); padding: 2px 6px; white-space: nowrap; }
+  .sessionvar-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .sessionvar-name { font-family: var(--mono); font-size: 12px; font-weight: 600; flex: 0 0 auto; }
+  .sessionvar-preview { flex: 1 1 auto; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  #scenarioTable { table-layout: fixed; }
+  #scenarioTable th, #scenarioTable td { overflow: hidden; }
   #scenarioTable .row-grip { cursor: grab; color: var(--muted); text-align: center; width: 20px; user-select: none; }
   #scenarioTable tbody tr.dragging { opacity: .4; }
   #scenarioTable tbody tr.drop-above { box-shadow: inset 0 2px 0 0 var(--accent); }
@@ -252,22 +289,28 @@
 
   <div class="shell-body" id="shellBody">
     <div class="activity-bar">
-      <button class="tab active" data-view="terminal" title="Terminal">⌨</button>
-      <button class="tab" data-view="scenarios" title="Suites">▤</button>
-      <button class="tab" data-view="scripts" title="Scripts">❮❯</button>
+      <button class="tab active" data-view="terminal" title="Terminal" aria-label="Terminal">⌨</button>
+      <button class="tab" data-view="scenarios" title="Suites" aria-label="Suites">▤</button>
+      <button class="tab" data-view="scripts" title="Scripts" aria-label="Scripts">❮❯</button>
+      <button class="tab" data-view="sessions" title="Sessions" aria-label="Sessions">⏹</button>
     </div>
 
     <aside class="sidebar" id="sidebarTerminal" style="display:none">
       <h2>Terminal</h2>
       <div class="muted">Connect and drive the live 5250 session in the main panel.</div>
+      <h2 style="margin-top:20px">Session Variables</h2>
+      <div class="muted" style="margin-bottom:10px">Values grabbed with Extract Area/Extract Table outside recording. In-memory only — gone on disconnect or restart.</div>
+      <div id="sessionVarsList"><div class="muted">(none yet)</div></div>
     </aside>
 
     <aside class="sidebar" id="sidebarScenarios" style="display:none">
       <h2>Suites</h2>
       <div class="muted" style="margin-bottom:14px">Plain data - CSV steps, no code. Run them straight, or pull them into a script from the Scripts tab.</div>
+      <div class="row" style="margin-bottom:12px">
+        <button class="primary small" id="btnNewFile" style="width:100%">+ New Suite…</button>
+      </div>
       <div class="row" style="margin-bottom:8px">
-        <input id="newFileName" autocomplete="off" placeholder="new suite name" style="flex:1">
-        <button class="primary small" id="btnNewFile">+ New</button>
+        <input id="fileFilter" class="search-input" autocomplete="off" placeholder="🔍 Filter suites…" style="flex:1">
       </div>
       <div id="fileList"></div>
     </aside>
@@ -275,11 +318,18 @@
     <aside class="sidebar" id="sidebarScripts" style="display:none">
       <h2>Scripts</h2>
       <div class="muted" style="margin-bottom:14px">Standalone JS orchestrators. A script has no suite of its own - pull in whichever suites it needs with importSuite().</div>
+      <div class="row" style="margin-bottom:12px">
+        <button class="primary small" id="btnNewScript" style="width:100%">+ New Script…</button>
+      </div>
       <div class="row" style="margin-bottom:8px">
-        <input id="newScriptName" autocomplete="off" placeholder="new script name" style="flex:1">
-        <button class="primary small" id="btnNewScript">+ New</button>
+        <input id="scriptFilter" class="search-input" autocomplete="off" placeholder="🔍 Filter scripts…" style="flex:1">
       </div>
       <div id="scriptList"></div>
+    </aside>
+
+    <aside class="sidebar" id="sidebarSessions" style="display:none">
+      <h2>Sessions</h2>
+      <div class="muted">Every connected session and whatever suite/script it's currently running, live. Kill force-disconnects a runaway run's session — the only reliable way to interrupt a step that's blocked mid-network-call.</div>
     </aside>
 
     <div class="main-content">
@@ -287,6 +337,7 @@
   <section class="view active" id="view-terminal">
     <div class="panel">
       <h2>Connection</h2>
+      <form id="connectionForm">
       <div class="row">
         <label>Session</label><input id="sessionId" autocomplete="off" value="default" style="width:90px">
         <label>Host</label><input id="host" autocomplete="off" value="pub400.com" style="width:150px">
@@ -301,21 +352,34 @@
         <label>Password</label><input id="pass" autocomplete="off" type="password" style="width:120px">
         <button id="btnSignon">Sign On</button>
       </div>
+      </form>
       <div class="row">
         <button id="btnRecordToggle">● Record</button>
         <span id="recordStatus" class="muted"></span>
-        <button class="small" id="btnRecordCheck" style="display:none">+ Check current screen</button>
-        <button class="small" id="btnRecordExtract" style="display:none">+ Extract from screen</button>
-        <button class="small" id="btnSelectArea" style="display:none" title="Drag a rectangle on the screen below to extract multiple rows/columns at once (e.g. a subfile job list)">▦ Select Area to Extract</button>
-        <button class="primary small" id="btnRecordSave" style="display:none">Save as suite…</button>
-        <button class="danger small" id="btnRecordDiscard" style="display:none">Discard</button>
+      </div>
+      <div class="row" id="recordToolsRow" style="display:none">
+        <span class="group-label">Add a step by hand, without live-driving the terminal:</span>
+        <button class="small" id="btnRecordCheck" title="Record an assertion (pass/fail) against the current screen - not an output value.">+ Assert screen (check)</button>
+        <button class="small" id="btnRecordExtract" title="Record a single-value extract by typing its target (a row number or label) instead of dragging. For a multi-row/table grab, use Extract Area/Table below instead.">+ Extract one value…</button>
+        <button class="small" id="btnRecordAddStep" title="Insert any step by hand (type/key/check/extract/wait/disconnect) - e.g. a 'type' step whose value is ${VAR_NAME}, reusing a value you just extracted, without live-driving the terminal for it.">+ Add step manually…</button>
+      </div>
+      <div class="row" id="recordSaveRow" style="display:none">
+        <button class="primary small" id="btnRecordSave">Save as suite…</button>
+        <button class="danger small" id="btnRecordDiscard">Discard</button>
+      </div>
+      <div class="row">
+        <span class="group-label">Extract by dragging a rectangle on the screen below (while recording, saves a suite step; otherwise stored as an in-memory session variable):</span>
+        <button class="small" id="btnExtractArea" title="Drag a rectangle on the screen below to extract multiple rows (optionally sliced to one column range) at once.">▦ Extract Area</button>
+        <button class="small" id="btnExtractTable" title="Drag a rectangle over a subfile/list table - columns are auto-detected from whitespace gaps, no need to draw each one by hand.">▥ Extract Table</button>
+        <span id="extractModeHint" class="muted"></span>
       </div>
     </div>
 
     <div class="panel" id="terminalScreenPanel">
-      <h2>Screen <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ✕ below or ⛶ Immersive again to also turn off keyboard capture.</span></h2>
+      <h2>Screen <span id="screenBusyBadge" class="busy-badge" style="display:none"><span class="busy-spinner"></span>Busy</span> <span class="muted" id="immersiveHint" style="display:none">— Immersive mode active. Esc exits fullscreen (browser-reserved, cannot be suppressed); click ✕ below or ⛶ Immersive again to also turn off keyboard capture.</span></h2>
       <div id="screen">(not connected)</div>
       <div id="areaSelectOverlay" style="display:none"></div>
+      <div id="areaSelectLabel" style="display:none"></div>
       <div id="oiaLine"></div>
     </div>
     <button id="btnExitImmersive" style="display:none">✕ Exit Immersive</button>
@@ -350,18 +414,27 @@
         <div class="row" style="margin:0">
           <label>Run against session</label><input id="scenarioSession" autocomplete="off" value="default" style="width:90px">
           <span id="sessionBadge" class="badge">checking…</span>
+          <span class="toolbar-sep"></span>
           <label><input type="checkbox" id="headless"> Headless</label>
           <label title="Close the session when the run ends, whether it passed or failed - regardless of whether the suite itself has its own disconnect step"><input type="checkbox" id="disconnectOnFinish"> Disconnect when done</label>
+          <label title="Gap held after each step, including ones that don't strictly need to wait for anything - gives a slower/real host time to fully settle before the next step reads or acts on the screen. Raise it if a run against a slow host behaves oddly; lower it for a known-fast host.">Step delay (ms)</label><input id="stepDelayMs" autocomplete="off" value="200" style="width:60px">
+          <span class="toolbar-sep"></span>
           <button id="btnAddRow">+ Row</button>
           <button id="btnSaveScenarios">Save</button>
           <button class="primary" id="btnRunScenarios">Run All</button>
+          <span class="toolbar-sep"></span>
           <button class="danger small" id="btnDeleteFile">Delete file</button>
         </div>
+      </div>
+      <div class="row" id="lastRunRow" style="display:none">
+        <span class="muted">Last run: <span id="lastRunTime"></span></span>
+        <button class="small" id="btnReplayLastRun">▶ Replay last run</button>
       </div>
 
       <div class="editor-tabs">
         <button class="editor-tab active" data-tab="steps">Steps</button>
         <button class="editor-tab" data-tab="vars">Variables</button>
+        <button class="editor-tab" data-tab="running">Running <span id="runningProgress" class="muted"></span></button>
       </div>
 
       <div class="editor-tab-content active" id="tabContentSteps">
@@ -371,33 +444,36 @@
 
       <div class="editor-tab-content" id="tabContentVars">
         <div class="row" style="justify-content:space-between; margin-bottom:10px">
-          <div class="muted" style="text-transform:none">use ${NAME} in any Steps cell above. Each row is one saved value set (same shape as &lt;file&gt;.data.csv, driving the generated .bat/.sh); the last row is what a plain Run All uses.</div>
+          <div class="muted" style="text-transform:none">use ${NAME} in any Steps cell above. One row per variable, one column per saved value set (same shape as &lt;file&gt;.data.csv, driving the generated .bat/.sh) - most suites only need "Value set 1"; the LAST column is what a plain Run All uses.</div>
           <div class="row" style="margin:0">
             <button class="small" id="btnAddVarCol">+ Variable</button>
-            <button class="small" id="btnAddVarRow">+ Row</button>
+            <button class="small" id="btnAddVarRow">+ Value set</button>
             <button class="small" id="btnSaveVars">Save</button>
           </div>
         </div>
         <table id="varsTable"><thead></thead><tbody></tbody></table>
       </div>
+
+      <div class="editor-tab-content" id="tabContentRunning">
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px">
+          <div id="runningCurrent" class="muted" style="font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div class="row" style="margin:0; gap:8px">
+            <button class="danger small" id="btnKillRun" style="display:none">■ Kill</button>
+            <span id="runningSessionBadge" class="badge">checking…</span>
+          </div>
+        </div>
+        <div id="runningScreen">(waiting for screen…)</div>
+        <div id="runningSteps" class="step-strip not-clickable"></div>
+      </div>
     </div>
 
     <div class="bottom-panel collapsed" id="bottomPanel">
       <div class="bottom-panel-tabs">
-        <button class="bp-tab active" data-bp="running">Running <span id="runningProgress" class="muted"></span></button>
-        <button class="bp-tab" data-bp="results">Results</button>
+        <button class="bp-tab active" data-bp="results">Results</button>
         <button class="bp-collapse" id="btnCollapseBottomPanel" title="Collapse/expand">▾</button>
       </div>
       <div class="bp-body">
-        <div class="bp-content active" id="bpContentRunning">
-          <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px">
-            <div id="runningCurrent" class="muted" style="font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
-            <span id="runningSessionBadge" class="badge">checking…</span>
-          </div>
-          <div id="runningScreen">(waiting for screen…)</div>
-          <div id="runningSteps" class="step-strip not-clickable"></div>
-        </div>
-        <div class="bp-content" id="bpContentResults">
+        <div class="bp-content active" id="bpContentResults">
           <div id="resultsSummary" class="muted" style="margin-bottom:8px"></div>
           <table id="resultsTable"><thead></thead><tbody></tbody></table>
         </div>
@@ -412,42 +488,72 @@
         <div class="row" style="margin:0">
           <label>Run against session</label><input id="scriptSession" autocomplete="off" value="default" style="width:90px">
           <span id="scriptSessionBadge" class="badge">checking…</span>
+          <span class="toolbar-sep"></span>
           <label title="Close the session when the run ends, whether it passed or failed"><input type="checkbox" id="scriptDisconnectOnFinish"> Disconnect when done</label>
+          <label title="Gap held after each step inside an execute() call, including ones that don't strictly need to wait for anything - gives a slower/real host time to fully settle before the next step reads or acts on the screen.">Step delay (ms)</label><input id="scriptStepDelayMs" autocomplete="off" value="200" style="width:60px">
+          <span class="toolbar-sep"></span>
           <button id="btnImportSuite" style="display:none">+ Import Suite</button>
           <button id="btnSaveScript" style="display:none">Save</button>
           <button class="primary" id="btnRunScript" style="display:none">Run</button>
+          <span class="toolbar-sep"></span>
           <button class="danger small" id="btnDeleteScript" style="display:none">Delete script</button>
         </div>
       </div>
       <div class="muted" id="scriptImports" style="margin:8px 0"></div>
-      <div id="scriptEmptyHint" class="empty-hint">Select a script on the left, or create one.</div>
-      <div id="scriptEditor" style="border:1px solid var(--border); overflow:hidden; display:none;"></div>
+      <div class="row" id="scriptLastRunRow" style="display:none">
+        <span class="muted">Last run: <span id="scriptLastRunTime"></span></span>
+        <button class="small" id="btnReplayScriptLastRun">▶ Replay last run</button>
+      </div>
+
+      <div class="editor-tabs">
+        <button class="editor-tab active" data-tab="scriptEditor">Editor</button>
+        <button class="editor-tab" data-tab="scriptRunning">Running <span id="scriptRunningProgress" class="muted"></span></button>
+        <button class="editor-tab" data-tab="scriptConsole">Console</button>
+      </div>
+
+      <div class="editor-tab-content active" id="tabContentScriptEditor">
+        <div id="scriptEmptyHint" class="empty-hint">Select a script on the left, or create one.</div>
+        <div id="scriptEditor" style="border:1px solid var(--border); overflow:hidden; display:none;"></div>
+      </div>
+
+      <div class="editor-tab-content" id="tabContentScriptRunning">
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px">
+          <div id="scriptRunningCurrent" class="muted" style="font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
+          <div class="row" style="margin:0; gap:8px">
+            <button class="danger small" id="btnKillScriptRun" style="display:none">■ Kill</button>
+            <span id="scriptRunningSessionBadge" class="badge">checking…</span>
+          </div>
+        </div>
+        <div id="scriptRunningScreen">(waiting for screen…)</div>
+      </div>
+
+      <div class="editor-tab-content" id="tabContentScriptConsole">
+        <div id="scriptRunningConsole">(no output yet)</div>
+      </div>
     </div>
 
     <div class="bottom-panel collapsed" id="scriptBottomPanel">
       <div class="bottom-panel-tabs">
-        <button class="bp-tab active" data-bp="scriptRunning">Running <span id="scriptRunningProgress" class="muted"></span></button>
-        <button class="bp-tab" data-bp="scriptConsole">Console</button>
-        <button class="bp-tab" data-bp="scriptResults">Results</button>
+        <button class="bp-tab active" data-bp="scriptResults">Results</button>
         <button class="bp-collapse" id="btnCollapseScriptBottomPanel" title="Collapse/expand">▾</button>
       </div>
       <div class="bp-body">
-        <div class="bp-content active" id="bpContentScriptRunning">
-          <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px">
-            <div id="scriptRunningCurrent" class="muted" style="font-family: var(--mono); font-size: 13px; color: var(--accent);"></div>
-            <span id="scriptRunningSessionBadge" class="badge">checking…</span>
-          </div>
-          <div class="muted" style="margin-bottom:4px; font-size:12px">AS/400 screen</div>
-          <div id="scriptRunningScreen">(waiting for screen…)</div>
-        </div>
-        <div class="bp-content" id="bpContentScriptConsole">
-          <div id="scriptRunningConsole">(no output yet)</div>
-        </div>
-        <div class="bp-content" id="bpContentScriptResults">
+        <div class="bp-content active" id="bpContentScriptResults">
           <div id="scriptResultsSummary" class="muted" style="margin-bottom:8px"></div>
           <table id="scriptResultsTable"><thead></thead><tbody></tbody></table>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-sessions">
+    <div class="panel">
+      <h2>Sessions <span class="muted" id="sessionsCount"></span></h2>
+      <div class="muted" style="margin-bottom:8px">Every connected terminal session, and whatever suite/script it's currently running. Kill stops the run and force-disconnects its session.</div>
+      <table id="sessionsTable">
+        <thead><tr><th>Session</th><th>Status</th><th>Running</th><th>Progress</th><th></th></tr></thead>
+        <tbody><tr><td colspan="5" class="muted">(no sessions yet)</td></tr></tbody>
+      </table>
     </div>
   </section>
 
@@ -468,7 +574,26 @@
       <button class="small" id="replayClose">✕ Close</button>
     </div>
     <div id="replayLabel" class="muted" style="margin-bottom:8px"></div>
-    <div id="replayScreen"></div>
+    <div style="position:relative">
+      <div id="replayScreen"></div>
+      <div id="replayAreaOverlay" style="display:none"></div>
+      <div id="replayAreaLabel" style="display:none"></div>
+    </div>
+
+    <div id="replayExtractPanel" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-soft)">
+      <div class="row" style="margin-bottom:6px">
+        <span class="group-label" style="margin-bottom:0">This step extracted <span id="replayExtractName"></span> - drag on the screen above to adjust its selection</span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button class="small" id="replayModeArea">▦ Area</button>
+        <button class="small" id="replayModeTable">▥ Table</button>
+        <span id="replayExtractRange" class="muted"></span>
+        <span class="toolbar-sep"></span>
+        <button class="primary small" id="replaySaveExtract">💾 Save to step</button>
+      </div>
+      <div id="replayExtractPreview" class="muted" style="font-family:var(--mono); font-size:12px; white-space:pre-wrap; max-height:140px; overflow-y:auto"></div>
+    </div>
+
     <div class="row" style="justify-content:center; margin-top:12px">
       <button id="replayPrev">◂ Prev</button>
       <span id="replayCounter" class="muted" style="min-width:80px; text-align:center"></span>
@@ -487,8 +612,7 @@
     <div class="muted" style="margin-bottom:12px">Each project has its own scenarios, results, and extracted data. One project is active at a time.</div>
     <div id="projectList"></div>
     <div class="row" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border-soft)">
-      <input id="newProjectName" autocomplete="off" placeholder="new project name" style="flex:1">
-      <button class="primary small" id="btnNewProject">+ Create &amp; Open</button>
+      <button class="primary small" id="btnNewProject" style="width:100%">+ New Project…</button>
     </div>
   </div>
 </div>
@@ -516,11 +640,20 @@
 </div>
 
 <script>
-const KEYS = ["ENTER","F3","F12","PAGE_UP","PAGE_DOWN","TAB","CLEAR","HELP",
-  "F1","F2","F4","F5","F6","F7","F8","F9","F10","F11","F13","F14","F15","F16",
-  "F17","F18","F19","F20","F21","F22","F23","F24","PA1","PA2","PA3"];
+// Grouped (not one flat alphabet-soup row) so the keys you actually reach for often - ENTER,
+// TAB, CLEAR, HELP, RESET - aren't buried among two dozen F-keys you'll rarely touch.
+const KEY_GROUPS = [
+  { label: null, keys: ["ENTER", "TAB", "CLEAR", "HELP", "RESET"] },
+  { label: "Function keys", keys: ["F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"] },
+  { label: "Extended function keys", keys: ["F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24"] },
+  { label: "Paging & attention", keys: ["PAGE_UP","PAGE_DOWN","PA1","PA2","PA3"] },
+];
 
 function $(id) { return document.getElementById(id); }
+// Wrapping Connection in a real <form> gives the password field proper autofill semantics (and
+// silences Chrome's "password field not in a form" advisory) - every action in it is already its
+// own button with its own click handler, so form submission itself (Enter key, etc.) is a no-op.
+$("connectionForm").addEventListener("submit", (e) => e.preventDefault());
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 2200);
@@ -640,7 +773,7 @@ const ACTION_ITEMS = [
   { name: "type", description: "Fill an input field. target: label:<text> or <row>,<col>. value: text to enter." },
   { name: "key", description: "Send an AID key. value: ENTER, F3, TAB, PAGEDOWN, ... (this row's target is unused)." },
   { name: "check", description: "Assert on-screen text. target: label:<text>, row:<n>, or message. expected: substring to match." },
-  { name: "extract", description: "Pull a value into results. target: label:<text>, row:<n>, message, or rows:<start>-<end>[:<colStart>-<colEnd>]. value: output field name." },
+  { name: "extract", description: "Pull a value into results. target: label:<text>, row:<n>, message, rows:<start>-<end>[:<colStart>-<colEnd>] (raw text per row), or table:<start>-<end>[:<colStart>-<colEnd>] (auto-splits each row into columns). value: output field name." },
   { name: "include", description: "Splice in another scenario file's steps here. target: file name (no .csv)." },
   { name: "connect", description: "Open a session (put alone in its own case, e.g. \"setup\"). target: host. value: port (default 23). expected: \"true\" for SSL." },
   { name: "wait", description: "Sleep N seconds (capped 120) for something outside the 5250 buffer. value: seconds." },
@@ -659,6 +792,7 @@ const KEY_ITEMS = [
   { name: "DELETE", description: "Delete character" }, { name: "INSERT", description: "Toggle insert mode" },
   { name: "ERASE_EOF", description: "Erase to end of field" }, { name: "ERASE_FIELD", description: "Erase entire field" },
   { name: "BACK_SPACE", description: "Backspace" }, { name: "FIELD_EXIT", description: "Field exit" }, { name: "PRINT", description: "Print screen" },
+  { name: "RESET", description: "Unlock the keyboard (after an X-error/beep — e.g. backspacing past a field's start)" },
 ];
 
 const TARGET_TEMPLATES = {
@@ -676,6 +810,7 @@ const TARGET_TEMPLATES = {
     { name: "row:", description: "Whole row text, e.g. row:24", insertValue: "row:" },
     { name: "message", description: "The message line (row 24)", insertValue: "message" },
     { name: "rows:", description: "Multiple rows off a list/subfile, e.g. rows:9-13", insertValue: "rows:" },
+    { name: "table:", description: "Same range as rows:, but each row is auto-split into columns, e.g. table:9-13", insertValue: "table:" },
   ],
   connect: [{ name: "pub400.com", description: "Public IBM i test system", insertValue: "pub400.com" }],
 };
@@ -726,7 +861,7 @@ function scenarioFilesForInclude() {
 }
 
 // ---------- activity bar / views ----------
-const SIDEBAR_ID = { terminal: "sidebarTerminal", scenarios: "sidebarScenarios", scripts: "sidebarScripts" };
+const SIDEBAR_ID = { terminal: "sidebarTerminal", scenarios: "sidebarScenarios", scripts: "sidebarScripts", sessions: "sidebarSessions" };
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", async () => {
     document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
@@ -741,22 +876,29 @@ document.querySelectorAll(".tab").forEach(btn => {
       if ($("status").classList.contains("connected")) {
         try { renderScreen(await rpc("screen")); } catch (e) {}
       }
+      refreshSessionVars();
     }
     if (btn.dataset.view === "scripts" && !scriptsLoaded) {
       scriptsLoaded = true;
       await loadScriptList();
     }
+    if (btn.dataset.view === "sessions") await refreshSessionsPanel();
   });
 });
 $(SIDEBAR_ID[document.querySelector(".tab.active").dataset.view]).style.display = "block";
 
-// ---------- editor tabs (Steps / Variables / Script) ----------
+// ---------- editor tabs (Suites: Steps/Variables/Running - Scripts: Editor/Running/Console) ----------
+// Scoped to the containing .view - Suites and Scripts each have their own tab set, and an
+// unscoped query would toggle "active" off a tab in whichever view ISN'T being switched right now
+// too (they share the same .editor-tab/.editor-tab-content classes), silently leaving it with no
+// active tab at all the next time that view is shown.
 document.querySelectorAll(".editor-tab").forEach(btn => {
-  btn.addEventListener("click", () => showEditorTab(btn.dataset.tab));
+  btn.addEventListener("click", () => showEditorTab(btn.dataset.tab, btn.closest(".view")));
 });
-function showEditorTab(name) {
-  document.querySelectorAll(".editor-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
-  document.querySelectorAll(".editor-tab-content").forEach(c => {
+function showEditorTab(name, scope) {
+  scope = scope || document;
+  scope.querySelectorAll(".editor-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  scope.querySelectorAll(".editor-tab-content").forEach(c => {
     c.classList.toggle("active", c.id === "tabContent" + name.charAt(0).toUpperCase() + name.slice(1));
   });
 }
@@ -780,13 +922,22 @@ function hideBottomPanel() {
 }
 
 // ---------- rpc ----------
+// Every RPC round-trip (Connect, Sign On, a keystroke, ...) bumps this counter so the busy badge
+// lights up the instant something is sent, not just once the host reports itself inhibited -
+// covers the network round-trip itself, not only host-side processing time.
+let rpcInFlight = 0;
 async function rpc(cmd, extra) {
   const body = Object.assign({ cmd, sessionId: $("sessionId").value || "default" }, extra || {});
-  const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify(body) });
-  const json = await res.json();
-  if (!json.ok) { toast("Error: " + json.error); throw new Error(json.error); }
-  if (json.recordedRow) addRecordedRowToTable(json.recordedRow);
-  return json;
+  rpcInFlight++; updateBusyBadge();
+  try {
+    const res = await fetch("/api/rpc", { method: "POST", body: JSON.stringify(body) });
+    const json = await res.json();
+    if (!json.ok) { toast("Error: " + json.error); throw new Error(json.error); }
+    if (json.recordedRow) addRecordedRowToTable(json.recordedRow);
+    return json;
+  } finally {
+    rpcInFlight--; updateBusyBadge();
+  }
 }
 
 // ---------- recording ----------
@@ -822,12 +973,12 @@ function setRecordingUI(mode) {
   $("btnRecordToggle").classList.toggle("active", mode === "recording");
   $("recordStatus").textContent = mode === "recording" ? "recording every Type/Key..."
     : mode === "stopped" ? "stopped — Save as suite, or Discard" : "";
-  $("btnRecordCheck").style.display = mode === "recording" ? "inline-block" : "none";
-  $("btnRecordExtract").style.display = mode === "recording" ? "inline-block" : "none";
-  $("btnSelectArea").style.display = mode === "recording" ? "inline-block" : "none";
-  $("btnRecordSave").style.display = mode === "idle" ? "none" : "inline-block";
-  $("btnRecordDiscard").style.display = mode === "idle" ? "none" : "inline-block";
-  if (mode !== "recording") setAreaSelectMode(false);
+  $("recordToolsRow").style.display = mode === "recording" ? "flex" : "none";
+  $("recordSaveRow").style.display = mode === "idle" ? "none" : "flex";
+  // Extract Area/Extract Table stay visible and usable in every recording state - see the
+  // area-select block below for what changes is what a completed drag DOES with the result
+  // (record-mark-extract vs. an immediate extract-now into an in-memory session variable), not
+  // whether the tool is available at all.
 }
 
 $("btnRecordToggle").addEventListener("click", async () => {
@@ -862,21 +1013,50 @@ $("btnRecordCheck").addEventListener("click", async () => {
   try { await rpc("record-mark-check", { target, expected }); toast("Check recorded"); } catch (e) {}
 });
 
+// Records an "extract" suite step AND, since the value is already sitting right there in the
+// live screen, ALSO grabs it into an in-memory session variable immediately - readable via the
+// Session Variables panel (⧉ Copy) without waiting for the suite to be saved/run. Shared by the
+// "+ Extract from screen" button and the Extract Area/Extract Table drag tools below.
+async function recordExtractAndVar(target, name) {
+  try { await rpc("record-mark-extract", { target, name }); } catch (e) { return; }
+  try { await rpc("extract-now", { target, name }); refreshSessionVars(); } catch (e) {}
+  toast(`Extract recorded: ${target} (also set as session var "${name}")`);
+}
+
 $("btnRecordExtract").addEventListener("click", async () => {
   const target = prompt('Extract target: "row:N", or a label, e.g. "label:Balance"', "");
   if (!target) return;
   const name = prompt("Output field name for this value:", "");
   if (!name) return;
-  try { await rpc("record-mark-extract", { target, name }); toast("Extract recorded"); } catch (e) {}
+  await recordExtractAndVar(target, name);
 });
 
-// ---------- select-area-to-extract: a Windows-style rubber-band drag over the screen, for
-// pulling multiple rows (and optionally a column slice) off a subfile/list screen in one go
-// instead of hand-typing a "rows:<start>-<end>" target. Deliberately opt-in and separate from
-// normal screen interaction — the screen itself stays non-clickable otherwise (see the earlier
-// "disallow mouse interactions" change); this is a distinct, explicit tool, only available while
-// recording (there's nowhere to save the resulting extract step otherwise). ----------
-let areaSelectMode = false;
+$("btnRecordAddStep").addEventListener("click", async () => {
+  const action = prompt('Action: type, key, check, extract, wait, or disconnect', "type");
+  if (!action) return;
+  const target = prompt("Target (meaning depends on action - e.g. label:User, 20,7, row:24, rows:9-13, message):", "");
+  if (target === null) return;
+  const value = prompt("Value (text to type / key name / seconds to wait / output var name for extract):", "");
+  if (value === null) return;
+  const expected = prompt("Expected (only used by 'check'):", "");
+  if (expected === null) return;
+  try {
+    await rpc("record-mark-step", { action, target, value, expected });
+    toast(`Step added: ${action} ${target}`);
+  } catch (e) {}
+});
+
+// ---------- Extract Area / Extract Table: a Windows-style rubber-band drag over the screen, for
+// pulling multiple rows (Extract Area: optionally sliced to one column range; Extract Table:
+// auto-split into columns off whitespace gaps) off a subfile/list screen in one go instead of
+// hand-typing a "rows:<start>-<end>" or "table:<start>-<end>" target. Deliberately opt-in and
+// separate from normal screen interaction — the screen itself stays non-clickable otherwise (see
+// the earlier "disallow mouse interactions" change); this is a distinct, explicit tool.
+// Available in EVERY connection state, not just while recording: while recording, a completed
+// drag calls record-mark-extract (saves a suite step, unchanged from before); otherwise it calls
+// extract-now, which grabs the value RIGHT NOW into an in-memory session variable (see the
+// Session Variables list in the sidebar) — useful for a one-off lookup with no suite involved. ---
+let areaSelectMode = null; // null | "area" | "table"
 let areaDragStart = null;
 let areaCharW = 0, areaCharH = 0;
 
@@ -906,23 +1086,40 @@ function areaPixelToRowCol(clientX, clientY) {
   return { row: Math.max(1, Math.min(maxRows, row)), col: Math.max(1, Math.min(maxCols, col)) };
 }
 
-function setAreaSelectMode(on) {
-  areaSelectMode = on;
-  $("btnSelectArea").classList.toggle("active", on);
-  $("screen").style.cursor = on ? "crosshair" : "";
-  if (!on) { $("areaSelectOverlay").style.display = "none"; areaDragStart = null; }
+function setAreaSelectMode(mode) {
+  if (mode && !$("status").classList.contains("connected")) { toast("Connect first"); return; }
+  areaSelectMode = mode;
+  $("btnExtractArea").classList.toggle("active", mode === "area");
+  $("btnExtractTable").classList.toggle("active", mode === "table");
+  $("screen").style.cursor = mode ? "crosshair" : "";
+  $("extractModeHint").textContent = mode === "area" ? "Drag over the screen to select rows/columns to extract…"
+    : mode === "table" ? "Drag over a table - columns are auto-detected…" : "";
+  if (!mode) { $("areaSelectOverlay").style.display = "none"; $("areaSelectLabel").style.display = "none"; areaDragStart = null; }
 }
 
-$("btnSelectArea").addEventListener("click", () => setAreaSelectMode(!areaSelectMode));
+$("btnExtractArea").addEventListener("click", () => setAreaSelectMode(areaSelectMode === "area" ? null : "area"));
+$("btnExtractTable").addEventListener("click", () => setAreaSelectMode(areaSelectMode === "table" ? null : "table"));
 
 function updateAreaOverlay(x1, y1, x2, y2) {
   const overlay = $("areaSelectOverlay");
   const panelRect = $("terminalScreenPanel").getBoundingClientRect();
+  const left = Math.min(x1, x2) - panelRect.left, top = Math.min(y1, y2) - panelRect.top;
   overlay.style.display = "block";
-  overlay.style.left = (Math.min(x1, x2) - panelRect.left) + "px";
-  overlay.style.top = (Math.min(y1, y2) - panelRect.top) + "px";
+  overlay.style.left = left + "px";
+  overlay.style.top = top + "px";
   overlay.style.width = Math.abs(x2 - x1) + "px";
   overlay.style.height = Math.abs(y2 - y1) + "px";
+
+  // Live row/col readout, updated on every drag movement — so the exact bounds about to be
+  // extracted are visible the whole time, not just revealed after the fact in a naming prompt.
+  const start = areaPixelToRowCol(x1, y1), end = areaPixelToRowCol(x2, y2);
+  const rowStart = Math.min(start.row, end.row), rowEnd = Math.max(start.row, end.row);
+  const colStart = Math.min(start.col, end.col), colEnd = Math.max(start.col, end.col);
+  const label = $("areaSelectLabel");
+  label.textContent = `${areaSelectMode === "table" ? "table" : "rows"}: rows ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}`;
+  label.style.display = "block";
+  label.style.left = left + "px";
+  label.style.top = Math.max(0, top - 20) + "px";
 }
 
 $("screen").addEventListener("mousedown", (e) => {
@@ -939,26 +1136,43 @@ document.addEventListener("mousemove", (e) => {
 
 document.addEventListener("mouseup", async (e) => {
   if (!areaSelectMode || !areaDragStart) return;
+  const mode = areaSelectMode;
   const start = areaPixelToRowCol(areaDragStart.x, areaDragStart.y);
   const end = areaPixelToRowCol(e.clientX, e.clientY);
   areaDragStart = null;
 
   const rowStart = Math.min(start.row, end.row), rowEnd = Math.max(start.row, end.row);
   const colStart = Math.min(start.col, end.col), colEnd = Math.max(start.col, end.col);
-  if (rowStart === rowEnd && colStart === colEnd) { $("areaSelectOverlay").style.display = "none"; return; } // a click, not a drag — ignore
+  if (rowStart === rowEnd && colStart === colEnd) { // a click, not a drag — ignore
+    $("areaSelectOverlay").style.display = "none";
+    $("areaSelectLabel").style.display = "none";
+    return;
+  }
 
-  // Keep the rectangle highlighted (now "locked in" — solid border, not the drag's dashed one)
-  // through the naming prompt, instead of vanishing the instant the mouse is released — otherwise
-  // there's nothing on screen to double-check against while typing the output name.
+  // Keep the rectangle (and its live row/col label) highlighted — "locked in", solid border
+  // instead of the drag's dashed one — through the naming prompt, instead of vanishing the
+  // instant the mouse is released, so there's still something on screen to double-check against.
   $("areaSelectOverlay").classList.add("locked");
-  const name = prompt(`Output field name for rows ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}:`, "extracted_data");
+  const prefix = mode === "table" ? "table" : "rows";
+  const name = prompt(`Output field name for ${prefix} ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}:`,
+    mode === "table" ? "extracted_table" : "extracted_data");
   $("areaSelectOverlay").classList.remove("locked");
   $("areaSelectOverlay").style.display = "none";
+  $("areaSelectLabel").style.display = "none";
   if (!name) return;
   const target = colEnd - colStart >= 78 // near-full-width drag: skip the column slice, keep the whole line
-    ? `rows:${rowStart}-${rowEnd}`
-    : `rows:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
-  try { await rpc("record-mark-extract", { target, name }); toast(`Extract recorded: ${target}`); } catch (err) {}
+    ? `${prefix}:${rowStart}-${rowEnd}`
+    : `${prefix}:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
+
+  if (recordMode === "recording") {
+    await recordExtractAndVar(target, name);
+  } else {
+    try {
+      const res = await rpc("extract-now", { target, name });
+      toast(`${name} = ${formatExtractedValue(res.value)}`);
+      refreshSessionVars();
+    } catch (err) {}
+  }
 });
 
 $("btnRecordSave").addEventListener("click", async () => {
@@ -980,6 +1194,31 @@ $("btnRecordSave").addEventListener("click", async () => {
       { method: "PUT", body: JSON.stringify(rows) });
     const putJson = await putRes.json();
     if (!putJson.ok) { toast("Error saving: " + putJson.error); return; }
+
+    // Any variable this recording extracted is worth shipping as a default in the suite's own
+    // .vars.csv - so ${NAME} already has a real starting value the moment the suite is opened
+    // or run again later, not just for as long as this live recording session happens to last.
+    // Merge with whatever vars.csv already has (GET first) rather than overwrite it outright -
+    // extract-now runs alongside whatever the recording already carried in from before.
+    const extractNames = [...new Set(rows.filter(r => (r.action || "").toLowerCase() === "extract" && r.value)
+      .map(r => r.value.trim()))];
+    if (extractNames.length) {
+      try {
+        const [sessionVarsRes, existingVarsRes] = await Promise.all([
+          rpc("session-vars"),
+          fetch(`/api/scenario-vars?flow=custom-steps&file=${encodeURIComponent(fileName)}`).then(r => r.json())
+        ]);
+        const sessionVars = sessionVarsRes.vars || {};
+        const merged = new Map((existingVarsRes.rows || []).map(r => [r.name, r.value]));
+        extractNames.forEach(name => {
+          if (name in sessionVars) merged.set(name, flattenForVars(sessionVars[name]));
+        });
+        if (merged.size) {
+          await fetch(`/api/scenario-vars?flow=custom-steps&file=${encodeURIComponent(fileName)}`,
+            { method: "PUT", body: JSON.stringify([...merged].map(([name, value]) => ({ name, value }))) });
+        }
+      } catch (e) { /* best-effort - the suite itself already saved fine either way */ }
+    }
 
     toast(`Saved ${putJson.count} rows to custom-steps/${fileName}`);
     pendingRecordedRows = [];
@@ -1015,6 +1254,76 @@ function screenGridText(screen) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// A "rows:" extraction is List<String> (join with " | " reads fine); a "table:" extraction is
+// List<List<String>> - naively joining that with Array.join stringifies each inner array as
+// "a,b,c" (JS's default array-to-string), which is unreadable. Detect the nested-array shape and
+// render it as a real N-row-by-M-col summary with each row's cells pipe-joined instead.
+function formatExtractedValue(v) {
+  if (!Array.isArray(v)) return String(v);
+  if (v.length && Array.isArray(v[0])) {
+    return `[${v.length} row${v.length === 1 ? "" : "s"} × ${v[0].length} col${v[0].length === 1 ? "" : "s"}: `
+      + v.map(row => row.join(" | ")).join(" || ") + "]";
+  }
+  return `[${v.length} row${v.length === 1 ? "" : "s"}: ${v.join(" | ")}]`;
+}
+
+// Plain-text flattening for a .vars.csv "value" cell (no brackets/counts, unlike
+// formatExtractedValue which is for on-screen display) - same " | "/" || " join scheme
+// StepActions uses server-side for rows:/table: extracts, so a saved default reads the same way
+// a real suite run's own vars.NAME would if it re-extracted the same range.
+function flattenForVars(v) {
+  if (!Array.isArray(v)) return String(v);
+  if (v.length && Array.isArray(v[0])) return v.map(row => row.join(" | ")).join(" || ");
+  return v.join(" | ");
+}
+
+// For the Session Variables "⧉ Copy" button specifically - NOT the same as flattenForVars, which
+// stays pipe-joined because that text can end up typed into a single 5250 field via ${NAME}
+// substitution, where an embedded raw newline doesn't mean anything. Copy is for pasting
+// somewhere ELSE (a text editor, a chat, another app) - a multi-row Extract Area/Extract Table
+// selection should paste back out as genuine multi-line text, one screen row per line, matching
+// how the box looked when you dragged it - a real "\n" between rows (never after the last one,
+// so no trailing blank line), cells within one table row still " | "-joined since that's a
+// same-line column separator, not a row boundary.
+function flattenForCopy(v) {
+  if (!Array.isArray(v)) return String(v);
+  if (v.length && Array.isArray(v[0])) return v.map(row => row.join(" | ")).join("\n");
+  return v.join("\n");
+}
+
+// ---------- session variables: values Extract Area/Extract Table stored in memory when used
+// OUTSIDE recording (see extract-now, the mouseup handler above). Listed here so they're
+// actually visible/usable, not just silently sitting server-side. ----------
+async function refreshSessionVars() {
+  let vars = {};
+  try {
+    const res = await rpc("session-vars");
+    vars = res.vars || {};
+  } catch (e) { return; }
+  const list = $("sessionVarsList");
+  const names = Object.keys(vars);
+  if (!names.length) { list.innerHTML = `<div class="muted">(none yet)</div>`; return; }
+  list.innerHTML = names.map(name => `
+    <div class="sessionvar-row">
+      <div class="sessionvar-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+      <div class="sessionvar-preview muted" title="${escapeHtml(formatExtractedValue(vars[name]))}">${escapeHtml(formatExtractedValue(vars[name]))}</div>
+      <button class="small" data-copy-var="${escapeHtml(name)}" title="Copy value">⧉</button>
+      <button class="small danger" data-del-var="${escapeHtml(name)}" title="Delete">✕</button>
+    </div>`).join("");
+  list.querySelectorAll("[data-copy-var]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const v = vars[btn.dataset.copyVar];
+      navigator.clipboard.writeText(flattenForCopy(v)).then(() => toast("Copied")).catch(() => toast("Copy failed"));
+    });
+  });
+  list.querySelectorAll("[data-del-var]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try { await rpc("session-var-delete", { name: btn.dataset.delVar }); } catch (e) {}
+      refreshSessionVars();
+    });
+  });
 }
 
 // Renders the screen with every detected field wrapped in a span, so the terminal itself
@@ -1121,6 +1430,72 @@ function renderScreen(resp) {
   $("oiaLine").textContent = `OIA: inhibited=${resp.oia.inputInhibited} locked=${resp.oia.keyboardLocked} msgWait=${resp.oia.messageWait}  cursor=${resp.cursor.row},${resp.cursor.col}`;
   $("status").textContent = "connected (" + $("sessionId").value + ")";
   $("status").classList.add("connected");
+  updateBusyBadge();
+  watchHostBusy();
+}
+
+// ---------- busy indicator: two distinct states, not one -----------------------------------
+// "busy" (spinner) = a normal in-flight round-trip (rpcInFlight, set by rpc() itself - covers
+// Connect/Sign On/a keystroke) or the host still processing what we last sent (OIA X-clock,
+// oia.inputInhibited). That clears itself once the round-trip/host catches up.
+// "locked" (red, clickable) = oia.keyboardLocked - an X-error the host won't clear on its own
+// (e.g. backspacing past a field's start beeps AND locks the keyboard - see the Escape/RESET
+// keydown handler below). This one needs a RESET, so the badge itself sends one when clicked -
+// no need to know Escape is bound to it.
+function updateBusyBadge() {
+  const oia = lastScreenResp && lastScreenResp.oia;
+  const locked = !!(oia && oia.keyboardLocked);
+  const hostBusy = !!(oia && oia.inputInhibited);
+  const badge = $("screenBusyBadge");
+  if (locked) {
+    badge.className = "busy-badge locked";
+    badge.innerHTML = "⚠ Keyboard locked — click to Reset";
+    badge.style.display = "inline-flex";
+  } else if (rpcInFlight > 0 || hostBusy) {
+    badge.className = "busy-badge";
+    badge.innerHTML = '<span class="busy-spinner"></span>Busy';
+    badge.style.display = "inline-flex";
+  } else {
+    badge.style.display = "none";
+  }
+}
+// A single RESET call doesn't always clear keyboardLocked in that same response - confirmed
+// empirically against a real host: tn5250j settles the unlock on its own schedule, not
+// synchronously within one call, but consecutive SEPARATE calls reliably converge within a
+// couple of tries (each one is fast, ~100ms - unlike waiting it out in one call, which measured
+// a genuine 15-SECOND hang against DEFAULT_TIMEOUT_MS before this fix). So retry a few times as
+// independent round-trips instead of expecting the first one to always work.
+async function sendResetUntilClear() {
+  let resp = null;
+  for (let i = 0; i < 4; i++) {
+    resp = await rpc("key", { key: "RESET" });
+    if (!resp.oia || !resp.oia.keyboardLocked) break;
+  }
+  return resp;
+}
+$("screenBusyBadge").addEventListener("click", () => {
+  if (lastScreenResp && lastScreenResp.oia && lastScreenResp.oia.keyboardLocked) {
+    queueTerminalAction(sendResetUntilClear);
+  }
+});
+
+// While the host reports itself inhibited (processing our last key/command), keep re-polling the
+// screen every 500ms - through the same terminalQueue used by real keystrokes, so this never
+// races ahead of or behind actual input - until it clears. Only one watcher loop runs at a time.
+let hostBusyWatcherRunning = false;
+function watchHostBusy() {
+  if (hostBusyWatcherRunning) return;
+  if (!lastScreenResp || !lastScreenResp.oia || !lastScreenResp.oia.inputInhibited) return;
+  hostBusyWatcherRunning = true;
+  const tick = () => {
+    if (!lastScreenResp || !lastScreenResp.oia || !lastScreenResp.oia.inputInhibited
+        || !$("status").classList.contains("connected")) {
+      hostBusyWatcherRunning = false;
+      return;
+    }
+    queueTerminalAction(() => rpc("screen")).finally(() => setTimeout(tick, 500));
+  };
+  setTimeout(tick, 500);
 }
 
 // ---------- immersive mode: fullscreen + arrow-key cursor movement ----------
@@ -1160,7 +1535,7 @@ document.addEventListener("fullscreenchange", () => {
 // Browsers reserve a handful of combos at the OS/chrome level that no web page can intercept
 // (F11 fullscreen, F12 devtools, Ctrl+W/T/N tab & window management, and in most browsers
 // F5/Ctrl+R refresh) — those simply never reach this handler; everything else does. ----------
-const CHROME_INPUT_IDS = new Set(["sessionId", "host", "port", "user", "pass", "newFileName"]);
+const CHROME_INPUT_IDS = new Set(["sessionId", "host", "port", "user", "pass"]);
 
 // Every terminal-mutating action (keystroke, click-to-place-cursor, keypad button) is chained
 // onto this single promise instead of fired independently. Without it, typing faster than one
@@ -1194,6 +1569,12 @@ document.addEventListener("keydown", (e) => {
 
   let aid = null;
   if (e.key === "Enter") aid = "ENTER";
+  // tn5250j locks the keyboard (X-error state) and beeps on the daemon's own machine — an AWT
+  // Toolkit.beep(), not a browser sound — on an invalid edit like backspacing past a field's
+  // start. A real 5250 keyboard unlocks via Reset; Escape is unused elsewhere outside immersive
+  // mode (in immersive mode fullscreen reserves it for exiting, same as any browser page), so it
+  // doubles as the Reset key here too.
+  else if (e.key === "Escape") aid = "RESET";
   else if (e.key === "Backspace") aid = "BACK_SPACE";
   else if (e.key === "Delete") aid = "DELETE";
   else if (e.key === "Insert") aid = "INSERT";
@@ -1207,7 +1588,8 @@ document.addEventListener("keydown", (e) => {
 
   if (aid) {
     e.preventDefault();
-    queueTerminalAction(() => rpc("key", { key: aid }));
+    if (aid === "RESET") queueTerminalAction(sendResetUntilClear);
+    else queueTerminalAction(() => rpc("key", { key: aid }));
     return;
   }
 
@@ -1233,15 +1615,74 @@ async function refreshHeaderStatus() {
 }
 setInterval(refreshHeaderStatus, 4000);
 refreshHeaderStatus();
+refreshSessionVars();
+
+// ---------- sessions panel: every connected session + whatever suite/script it's running, with
+// a Kill switch. Polls unconditionally (like refreshHeaderStatus) so the activity-bar tab, if we
+// ever add a running-count badge to it, stays accurate even while another tab is open. ----------
+async function refreshSessionsPanel() {
+  let sessions = {};
+  let runs = [];
+  try {
+    const sRes = await fetch("/api/rpc", { method: "POST", body: JSON.stringify({ cmd: "sessions" }) });
+    const sJson = await sRes.json();
+    if (sJson.ok) sessions = sJson.sessions;
+  } catch (e) {}
+  try {
+    const rRes = await fetch("/api/runs/active");
+    const rJson = await rRes.json();
+    if (rJson.ok) runs = rJson.runs;
+  } catch (e) {}
+
+  const runBySession = {};
+  runs.forEach(r => { runBySession[r.sessionId] = r; });
+  const sessionIds = new Set([...Object.keys(sessions), ...Object.keys(runBySession)]);
+
+  $("sessionsCount").textContent = sessionIds.size ? `(${sessionIds.size})` : "";
+  const tbody = document.querySelector("#sessionsTable tbody");
+  if (!sessionIds.size) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">(no sessions yet)</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = [...sessionIds].sort().map(sid => {
+    const connected = sessions[sid] === "connected";
+    const run = runBySession[sid];
+    const runningCell = run ? `${escapeHtml(run.kind)}: ${escapeHtml(run.name)}` : `<span class="muted">idle</span>`;
+    const progressCell = run ? `${run.completed}/${run.total}${run.current ? " — " + escapeHtml(run.current) : ""}` : "";
+    const killCell = run ? `<button class="danger small" data-kill-run="${run.runId}">■ Kill</button>` : "";
+    return `<tr>
+      <td>${escapeHtml(sid)}</td>
+      <td><span class="badge${connected ? " connected" : ""}">${connected ? "connected" : "disconnected"}</span></td>
+      <td>${runningCell}</td>
+      <td class="muted">${progressCell}</td>
+      <td>${killCell}</td>
+    </tr>`;
+  }).join("");
+  tbody.querySelectorAll("[data-kill-run]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/runs/cancel", { method: "POST", body: JSON.stringify({ runId: btn.dataset.killRun }) });
+        const json = await res.json();
+        toast(json.ok && json.cancelled ? "Run killed" : "Error: " + (json.error || "already finished"));
+      } catch (e) { toast("Error: " + e.message); }
+      refreshSessionsPanel();
+    });
+  });
+}
+setInterval(refreshSessionsPanel, 4000);
+refreshSessionsPanel();
 
 // ---------- replay viewer ----------
 let replaySteps = [];
 let replayIndex = 0;
+let replayContext = null; // {flow, file} - file may be null (script-driven: resolved per-step, see parseExtractLabel)
 
-function openReplay(steps, title) {
+function openReplay(steps, title, context) {
   if (!steps || !steps.length) { toast("No captured steps for this scenario"); return; }
   replaySteps = steps;
   replayIndex = 0;
+  replayContext = context || null;
   $("replayTitle").textContent = title;
   $("replaySteps").innerHTML = replaySteps.map((s, i) => {
     const label = s.label || "(unlabeled step)";
@@ -1264,7 +1705,225 @@ function showReplayStep() {
   $("replaySteps").querySelectorAll(".step-chip").forEach((div, i) => div.classList.toggle("current", i === replayIndex));
   const cur = $("replaySteps").querySelector(".current");
   if (cur) cur.scrollIntoView({ block: "nearest" });
+  updateReplayExtractPanel();
 }
+
+// ---------- replay extraction adjuster: drag a new selection on a PAST run's captured screen,
+// preview exactly what it would pull (computed client-side, no server round-trip - the whole
+// screen buffer is already sitting in replaySteps[i].screen), and write the new target range back
+// into the suite CSV that step actually came from. Two label formats reach here depending on how
+// the run happened: JsSuiteRunner.executeRange's "<suite> step <fileRow>: extract ..." (a script
+// run - fileRow is that suite's own 1-based file row position, same numbering steps(a,b) uses) vs
+// GenericStepFlow.runGroup's "step <caseStep>/<total>: extract ..." (a direct suite run - no suite
+// name in the label at all, since there's only ever one suite involved: replayContext.file). ----------
+let replayExtractMode = null; // "area" | "table"
+let replayExtractLoc = null;  // {flow, file, fileRow} | {flow, file, caseId, stepNo}
+let replayDragStart = null;
+
+function parseExtractStep(label, context) {
+  let m = /^(\S+) step (\d+): extract (\S+)(?: = (.+))?$/.exec(label || "");
+  if (m) return { flow: "custom-steps", file: m[1], fileRow: parseInt(m[2], 10), target: m[3], valueName: m[4] || "" };
+  m = /^step (\d+)\/\d+: extract (\S+)(?: = (.+))?$/.exec(label || "");
+  if (m && context && context.flow && context.file) {
+    return { flow: context.flow, file: context.file, stepNo: parseInt(m[1], 10), target: m[2], valueName: m[3] || "" };
+  }
+  return null;
+}
+
+function updateReplayExtractPanel() {
+  const s = replaySteps[replayIndex];
+  const loc = parseExtractStep(s.label, replayContext);
+  $("replayAreaOverlay").style.display = "none";
+  $("replayAreaLabel").style.display = "none";
+  replayDragStart = null;
+  if (!loc) { $("replayExtractPanel").style.display = "none"; replayExtractLoc = null; return; }
+  replayExtractLoc = loc;
+  $("replayExtractPanel").style.display = "block";
+  $("replayExtractName").textContent = loc.valueName || "(unnamed)";
+
+  const m = /^(table|rows):(\d+)-(\d+)(?::(\d+)-(\d+))?$/.exec(loc.target);
+  replayExtractMode = m && m[1] === "table" ? "table" : "area";
+  updateReplayModeButtons();
+  if (m) {
+    const rowStart = parseInt(m[2], 10), rowEnd = parseInt(m[3], 10);
+    const colStart = m[4] ? parseInt(m[4], 10) : 1, colEnd = m[5] ? parseInt(m[5], 10) : (s.screen.cols || 80);
+    drawReplaySelection(rowStart, rowEnd, colStart, colEnd);
+  }
+}
+
+function updateReplayModeButtons() {
+  $("replayModeArea").classList.toggle("active", replayExtractMode === "area");
+  $("replayModeTable").classList.toggle("active", replayExtractMode === "table");
+}
+$("replayModeArea").addEventListener("click", () => { replayExtractMode = "area"; updateReplayModeButtons(); refreshReplayPreviewFromOverlay(); });
+$("replayModeTable").addEventListener("click", () => { replayExtractMode = "table"; updateReplayModeButtons(); refreshReplayPreviewFromOverlay(); });
+
+// Row-number prefix ("NNN | ") screenGridText always renders - both this and the live Terminal
+// tab's own #screen share identical font-size/line-height (see their CSS), so the character-cell
+// measurement from measureAreaCharCell() (already probed against #screen) applies here unchanged;
+// only the padding/border box and this prefix's width differ.
+const REPLAY_PREFIX_CHARS = 6;
+
+function replayPixelToRowCol(clientX, clientY) {
+  if (!areaCharW) measureAreaCharCell();
+  const el = $("replayScreen");
+  const rect = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const padLeft = parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+  const padTop = parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth);
+  const col = Math.round((clientX - rect.left - padLeft) / areaCharW) - REPLAY_PREFIX_CHARS + 1;
+  const row = Math.floor((clientY - rect.top - padTop) / areaCharH) + 1;
+  const screen = replaySteps[replayIndex].screen;
+  return { row: Math.max(1, Math.min(screen.rows, row)), col: Math.max(1, Math.min(screen.cols, col)) };
+}
+
+function drawReplaySelection(rowStart, rowEnd, colStart, colEnd) {
+  if (!areaCharW) measureAreaCharCell();
+  const el = $("replayScreen");
+  const rect = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const padLeft = parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+  const padTop = parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth);
+  const x1 = rect.left + padLeft + (REPLAY_PREFIX_CHARS + colStart - 1) * areaCharW;
+  const x2 = rect.left + padLeft + (REPLAY_PREFIX_CHARS + colEnd) * areaCharW;
+  const y1 = rect.top + padTop + (rowStart - 1) * areaCharH;
+  const y2 = rect.top + padTop + rowEnd * areaCharH;
+  positionReplayOverlay(x1, y1, x2, y2, rowStart, rowEnd, colStart, colEnd);
+  renderReplayPreview(rowStart, rowEnd, colStart, colEnd);
+}
+
+function positionReplayOverlay(x1, y1, x2, y2, rowStart, rowEnd, colStart, colEnd) {
+  const overlay = $("replayAreaOverlay");
+  const containerRect = overlay.parentElement.getBoundingClientRect();
+  const left = Math.min(x1, x2) - containerRect.left, top = Math.min(y1, y2) - containerRect.top;
+  overlay.style.display = "block";
+  overlay.style.left = left + "px";
+  overlay.style.top = top + "px";
+  overlay.style.width = Math.abs(x2 - x1) + "px";
+  overlay.style.height = Math.abs(y2 - y1) + "px";
+  const label = $("replayAreaLabel");
+  label.textContent = `rows ${rowStart}-${rowEnd}, cols ${colStart}-${colEnd}`;
+  label.style.display = "block";
+  label.style.left = left + "px";
+  label.style.top = Math.max(0, top - 20) + "px";
+  $("replayExtractRange").textContent = `${replayExtractMode === "table" ? "table" : "rows"}:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
+}
+
+let replayLastBounds = null;
+
+function refreshReplayPreviewFromOverlay() {
+  if (!replayLastBounds) return;
+  const { rowStart, rowEnd, colStart, colEnd } = replayLastBounds;
+  $("replayExtractRange").textContent = `${replayExtractMode === "table" ? "table" : "rows"}:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
+  renderReplayPreview(rowStart, rowEnd, colStart, colEnd);
+}
+
+/** Client-side port of Terminal.rowText/rowTextRaw + StepActions.splitIntoColumns - same
+ * MIN_COLUMN_GAP=2 heuristic server-side "table:" extraction uses, so the preview shown here is
+ * exactly what a real run would produce, not an approximation. */
+function replayRowSlice(screen, row, colStart, colEnd, trim) {
+  const cols = screen.cols;
+  const rowStart = (row - 1) * cols;
+  const start = rowStart + Math.max(0, colStart - 1);
+  const end = Math.min(rowStart + Math.min(colEnd, cols), rowStart + cols);
+  if (start >= end) return "";
+  const raw = screen.text.slice(start, end);
+  return trim ? raw.replace(/\s+$/, "") : raw;
+}
+
+function replaySplitIntoColumns(rawRows) {
+  const MIN_GAP = 2;
+  if (!rawRows.length) return [];
+  const width = Math.max(...rawRows.map(r => r.length));
+  const blank = new Array(width).fill(true);
+  rawRows.forEach(r => {
+    for (let c = 0; c < width; c++) {
+      if ((c < r.length ? r[c] : " ") !== " ") blank[c] = false;
+    }
+  });
+  const rawSpans = [];
+  let c = 0;
+  while (c < width) {
+    if (blank[c]) { c++; continue; }
+    const start = c;
+    while (c < width && !blank[c]) c++;
+    rawSpans.push([start, c]);
+  }
+  const spans = [];
+  rawSpans.forEach(span => {
+    if (spans.length && span[0] - spans[spans.length - 1][1] < MIN_GAP) spans[spans.length - 1][1] = span[1];
+    else spans.push(span.slice());
+  });
+  if (!spans.length) spans.push([0, width]);
+  return rawRows.map(r => spans.map(([s, e]) => {
+    const ss = Math.min(s, r.length), ee = Math.min(e, r.length);
+    return ss < ee ? r.slice(ss, ee).trim() : "";
+  }));
+}
+
+function renderReplayPreview(rowStart, rowEnd, colStart, colEnd) {
+  replayLastBounds = { rowStart, rowEnd, colStart, colEnd };
+  const screen = replaySteps[replayIndex].screen;
+  if (replayExtractMode === "table") {
+    const rawRows = [];
+    for (let r = rowStart; r <= rowEnd; r++) rawRows.push(replayRowSlice(screen, r, colStart, colEnd, false));
+    const table = replaySplitIntoColumns(rawRows);
+    $("replayExtractPreview").textContent = table.map(row => row.join(" | ")).join("\n");
+  } else {
+    const rows = [];
+    for (let r = rowStart; r <= rowEnd; r++) rows.push(replayRowSlice(screen, r, colStart, colEnd, true));
+    $("replayExtractPreview").textContent = rows.join("\n");
+  }
+}
+
+$("replayScreen").addEventListener("mousedown", (e) => {
+  if (!replayExtractLoc) return;
+  e.preventDefault();
+  replayDragStart = { x: e.clientX, y: e.clientY };
+});
+document.addEventListener("mousemove", (e) => {
+  if (!replayExtractLoc || !replayDragStart) return;
+  const start = replayPixelToRowCol(replayDragStart.x, replayDragStart.y);
+  const end = replayPixelToRowCol(e.clientX, e.clientY);
+  drawReplaySelection(Math.min(start.row, end.row), Math.max(start.row, end.row),
+    Math.min(start.col, end.col), Math.max(start.col, end.col));
+});
+document.addEventListener("mouseup", () => { replayDragStart = null; });
+
+$("replaySaveExtract").addEventListener("click", async () => {
+  if (!replayExtractLoc || !replayLastBounds) return;
+  const { flow, file } = replayExtractLoc;
+  const { rowStart, rowEnd, colStart, colEnd } = replayLastBounds;
+  const screen = replaySteps[replayIndex].screen;
+  const prefix = replayExtractMode === "table" ? "table" : "rows";
+  const target = colEnd - colStart >= (screen.cols - 2)
+    ? `${prefix}:${rowStart}-${rowEnd}`
+    : `${prefix}:${rowStart}-${rowEnd}:${colStart}-${colEnd}`;
+
+  try {
+    const res = await fetch(`/api/scenarios?flow=${encodeURIComponent(flow)}&file=${encodeURIComponent(file)}`);
+    const json = await res.json();
+    if (!json.ok) { toast("Error: " + json.error); return; }
+    const rows = json.rows;
+    let idx = -1;
+    if ("fileRow" in replayExtractLoc) {
+      idx = replayExtractLoc.fileRow - 1;
+    } else {
+      idx = rows.findIndex(r => (r.case || "") === replayExtractLoc.caseId && parseInt(r.step, 10) === replayExtractLoc.stepNo);
+    }
+    if (idx < 0 || idx >= rows.length || (rows[idx].action || "").toLowerCase() !== "extract") {
+      toast("Couldn't find that step in " + flow + "/" + file + " - it may have been edited or reordered since this run");
+      return;
+    }
+    rows[idx].target = target;
+    const putRes = await fetch(`/api/scenarios?flow=${encodeURIComponent(flow)}&file=${encodeURIComponent(file)}`,
+      { method: "PUT", body: JSON.stringify(rows) });
+    const putJson = await putRes.json();
+    if (!putJson.ok) { toast("Error saving: " + putJson.error); return; }
+    toast(`Saved: ${file} step ${idx + 1} now extracts ${target}`);
+    if (currentFlow === flow && currentFile === file) await selectFile(file); // reflect it live if that suite's already open
+  } catch (e) { toast("Error: " + e.message); }
+});
 
 $("replayPrev").addEventListener("click", () => { if (replayIndex > 0) { replayIndex--; showReplayStep(); } });
 $("replayNext").addEventListener("click", () => { if (replayIndex < replaySteps.length - 1) { replayIndex++; showReplayStep(); } });
@@ -1277,9 +1936,35 @@ $("btnConnect").addEventListener("click", async () => {
   } catch (e) {}
 });
 
+// ---------- remembered connection settings: session id, host, port, SSL, and username persist
+// across reloads/restarts (localStorage, this browser only) so re-opening the GUI doesn't mean
+// re-typing them every time. The password is deliberately never saved anywhere. ----------
+const CONN_SETTINGS_KEY = "five250.connectionSettings";
+function saveConnSettings() {
+  try {
+    localStorage.setItem(CONN_SETTINGS_KEY, JSON.stringify({
+      sessionId: $("sessionId").value, host: $("host").value, port: $("port").value,
+      ssl: $("ssl").checked, user: $("user").value
+    }));
+  } catch (e) { /* localStorage unavailable (private mode, etc.) - just don't persist */ }
+}
+function restoreConnSettings() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(CONN_SETTINGS_KEY) || "null"); } catch (e) { return; }
+  if (!s) return;
+  if (s.sessionId) $("sessionId").value = s.sessionId;
+  if (s.host) $("host").value = s.host;
+  if (s.port) $("port").value = s.port;
+  if (typeof s.ssl === "boolean") $("ssl").checked = s.ssl;
+  if (s.user) $("user").value = s.user;
+}
+["sessionId", "host", "port", "ssl", "user"].forEach(id => $(id).addEventListener("change", saveConnSettings));
+restoreConnSettings();
+
 $("btnDisconnect").addEventListener("click", async () => {
   try { await rpc("disconnect"); $("screen").textContent = "(not connected)"; $("oiaLine").textContent = "";
     renderFieldsTable([]);
+    lastScreenResp = null; updateBusyBadge();
     $("status").textContent = "not connected"; $("status").classList.remove("connected"); toast("Disconnected"); } catch (e) {}
 });
 
@@ -1302,11 +1987,19 @@ $("btnSignon").addEventListener("click", async () => {
 });
 
 const keypad = $("keypad");
-KEYS.forEach(k => {
-  const b = document.createElement("button");
-  b.textContent = k; b.className = "small";
-  b.addEventListener("click", () => queueTerminalAction(() => rpc("key", { key: k })));
-  keypad.appendChild(b);
+KEY_GROUPS.forEach(g => {
+  if (g.label) {
+    const lbl = document.createElement("span");
+    lbl.className = "group-label"; lbl.style.marginTop = "4px";
+    lbl.textContent = g.label;
+    keypad.appendChild(lbl);
+  }
+  g.keys.forEach(k => {
+    const b = document.createElement("button");
+    b.textContent = k; b.className = "small" + (k === "ENTER" ? " primary" : "");
+    b.addEventListener("click", () => queueTerminalAction(() => rpc("key", { key: k })));
+    keypad.appendChild(b);
+  });
 });
 
 // ---------- scenarios: suite explorer ----------
@@ -1379,7 +2072,17 @@ async function loadFileList() {
     deleteBtn.addEventListener("click", async (e) => { e.stopPropagation(); await deleteFile(f.name); });
     list.appendChild(item);
   });
+  applyFileFilter();
 }
+
+function applyFileFilter() {
+  const q = ($("fileFilter").value || "").trim().toLowerCase();
+  document.querySelectorAll("#fileList .file-item").forEach(el => {
+    const name = el.querySelector(".fname").textContent.toLowerCase();
+    el.style.display = name.includes(q) ? "" : "none";
+  });
+}
+$("fileFilter").addEventListener("input", applyFileFilter);
 
 async function selectFile(name) {
   currentFile = name;
@@ -1389,7 +2092,7 @@ async function selectFile(name) {
     if (el.querySelector(".fname").textContent === name) el.classList.add("active");
   });
   $("currentFileTitle").textContent = currentFlow + " / " + name + ".csv";
-  showEditorTab("steps");
+  showEditorTab("steps", $("view-scenarios"));
   hideBottomPanel();
 
   const res = await fetch(`/api/scenarios?flow=${encodeURIComponent(currentFlow)}&file=${encodeURIComponent(name)}`);
@@ -1397,6 +2100,7 @@ async function selectFile(name) {
   if (!json.ok) { toast("Error: " + json.error); return; }
   renderScenarioTable(json.rows, json.columns);
   await loadVars();
+  refreshLastRunIndicator(currentFlow, name, "lastRunRow", "lastRunTime");
 }
 
 // ---------- variables: the data-driven grid (${NAME} substitution) ----------
@@ -1413,50 +2117,72 @@ async function loadVars() {
   renderVarsGrid(json.ok ? (json.rows || []) : []);
 }
 
+// Transposed from the underlying <file>.data.csv shape (columns=variable names, rows=value
+// sets): on screen, a VARIABLE is a row (a real "key" column, not a wide header a name has to
+// share space in) and each saved value SET is a column - "Value set 1" is all most suites ever
+// need, but the data-driven multi-set shape (driving the generated .bat/.sh) still works, it's
+// just to the right instead of stacked below. readVarsGrid()/renderVarsGrid() convert back and
+// forth; the PUT payload (columns/rows) is completely unchanged either way.
 function renderVarsGrid(rows) {
+  if (!rows.length) rows = [{}]; // always show at least one editable value-set column
   const thead = document.querySelector("#varsTable thead");
   const tbody = document.querySelector("#varsTable tbody");
-  thead.innerHTML = "<tr>" + currentVarColumns.map(c =>
-    `<th>${escapeHtml(c)} <button class="small danger" data-col="${escapeHtml(c)}" title="Remove variable ${escapeHtml(c)}" style="padding:1px 6px">✕</button></th>`
+  thead.innerHTML = "<tr><th>Variable</th>" + rows.map((r, i) =>
+    `<th>Value set ${i + 1} <button class="small danger" data-set="${i}" title="Remove this value set" style="padding:1px 6px">✕</button></th>`
   ).join("") + "<th></th></tr>";
-  thead.querySelectorAll("button[data-col]").forEach(btn => {
-    btn.addEventListener("click", () => removeVarColumn(btn.dataset.col));
+  thead.querySelectorAll("button[data-set]").forEach(btn => {
+    btn.addEventListener("click", () => removeValueSet(parseInt(btn.dataset.set, 10)));
   });
   tbody.innerHTML = "";
-  rows.forEach(row => addVarRowToTable(row));
+  currentVarColumns.forEach(name => addVarRowToTable(name, rows));
 }
 
-function addVarRowToTable(row) {
+function addVarRowToTable(name, rows) {
   const tbody = document.querySelector("#varsTable tbody");
   const tr = document.createElement("tr");
-  currentVarColumns.forEach(c => {
+  const nameTd = document.createElement("td");
+  nameTd.textContent = name;
+  nameTd.style.fontFamily = "var(--mono)";
+  nameTd.style.fontWeight = "600";
+  tr.appendChild(nameTd);
+  rows.forEach(row => {
     const td = document.createElement("td");
     const input = document.createElement("input");
-    input.value = (row && row[c]) || ""; input.dataset.col = c; input.autocomplete = "off";
-    td.appendChild(input); tr.appendChild(td);
+    input.value = (row && row[name]) || ""; input.dataset.var = name; input.autocomplete = "off";
+    td.appendChild(input);
+    if (/pass/i.test(name)) maskAsPassword(td, input);
+    tr.appendChild(td);
   });
   const tdDel = document.createElement("td");
   const del = document.createElement("button"); del.textContent = "✕"; del.className = "small danger";
-  del.addEventListener("click", () => tr.remove());
+  del.title = `Remove variable ${name}`;
+  del.addEventListener("click", () => removeVariable(name));
   tdDel.appendChild(del); tr.appendChild(tdDel);
   tbody.appendChild(tr);
 }
 
 function readVarsGrid() {
-  const rows = [];
+  const numSets = Math.max(0, document.querySelectorAll("#varsTable thead th").length - 2); // minus "Variable" + trailing blank th
+  const rows = Array.from({ length: numSets }, () => ({}));
   document.querySelectorAll("#varsTable tbody tr").forEach(tr => {
-    const row = {};
-    tr.querySelectorAll("input").forEach(inp => row[inp.dataset.col] = inp.value);
-    rows.push(row);
+    const inputs = tr.querySelectorAll("input");
+    inputs.forEach((inp, i) => { rows[i][inp.dataset.var] = inp.value; });
   });
   return rows;
 }
 
-/** Removes a variable (column) from the grid - existing rows' values for it are dropped. */
-function removeVarColumn(name) {
+/** Removes a variable (now a ROW) from the grid - its value in every value set is dropped. */
+function removeVariable(name) {
   const rows = readVarsGrid();
   currentVarColumns = currentVarColumns.filter(c => c !== name);
   rows.forEach(r => delete r[name]);
+  renderVarsGrid(rows);
+}
+
+/** Removes one value set (now a COLUMN) at the given index, across every variable. */
+function removeValueSet(index) {
+  const rows = readVarsGrid();
+  rows.splice(index, 1);
   renderVarsGrid(rows);
 }
 
@@ -1474,7 +2200,9 @@ $("btnAddVarCol").addEventListener("click", () => {
 $("btnAddVarRow").addEventListener("click", () => {
   if (!currentFile) { toast("Select or create a file first"); return; }
   if (!currentVarColumns.length) { toast('Add a variable ("+ Variable") first'); return; }
-  addVarRowToTable({});
+  const rows = readVarsGrid();
+  rows.push({});
+  renderVarsGrid(rows);
 });
 
 $("btnSaveVars").addEventListener("click", async () => {
@@ -1507,14 +2235,13 @@ function ensureMonacoLoaded() {
 }
 
 $("btnNewFile").addEventListener("click", async () => {
-  const name = $("newFileName").value.trim();
-  if (!name) { toast("Enter a file name"); return; }
+  const name = prompt("New suite name:", "");
+  if (!name || !name.trim()) return;
   const res = await fetch("/api/scenario-files", {
-    method: "POST", body: JSON.stringify({ flow: currentFlow, name })
+    method: "POST", body: JSON.stringify({ flow: currentFlow, name: name.trim() })
   });
   const json = await res.json();
   if (!json.ok) { toast("Error: " + json.error); return; }
-  $("newFileName").value = "";
   await loadFileList();
   await selectFile(json.name);
   toast("Created " + json.name);
@@ -1552,7 +2279,7 @@ $("btnDeleteFile").addEventListener("click", () => {
 function clearTable() {
   currentColumns = [];
   currentVarColumns = [];
-  showEditorTab("steps");
+  showEditorTab("steps", $("view-scenarios"));
   document.querySelector("#scenarioTable thead").innerHTML = "";
   document.querySelector("#scenarioTable tbody").innerHTML = "";
   document.querySelector("#varsTable thead").innerHTML = "";
@@ -1567,6 +2294,70 @@ let scriptsLoaded = false;
 let currentScript = null;
 let scriptEditorInstance = null;
 let scriptExtraLibDisposable = null;
+let scriptVarsLibDisposable = null;
+let scriptVarsLibTimer = null;
+
+// importSuite's return type has to come from OVERLOADS of importSuite itself, not from a
+// "declare const X: {...}" naming the script's own variable. An earlier version tried the latter
+// and it silently broke ALL completion on the imported variable: the script's real "const demo =
+// importSuite(...)" already declares `demo` (inferred via SCRIPT_DECLARATIONS' generic importSuite
+// signature), and a SECOND "declare const demo: {...}" in this extra lib collided with it as a
+// duplicate identifier - TS's error recovery widened demo to `any`, and Monaco fell back to
+// generic word-based suggestions (every global in scope) instead of real member completion. An
+// overload keyed on the exact literal ("flow","file") string arguments avoids this entirely: it
+// never declares a variable at all, so whatever name the script actually assigns to (or even an
+// inline importSuite(...).all() with no variable) infers correctly through normal call-return
+// typing. Specific overloads must be listed before the generic fallback - overload resolution
+// picks the first match, and a generic (flow: string, file: string) would otherwise shadow every
+// literal one. Debounced (400ms) since it's a real network round-trip per import, not something to
+// fire on every keystroke.
+const IMPORT_SUITE_CALL_RE = /importSuite\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/g;
+
+function scheduleScriptVarsLibRefresh(source) {
+  clearTimeout(scriptVarsLibTimer);
+  scriptVarsLibTimer = setTimeout(() => refreshScriptVarsLib(source), 400);
+}
+
+async function refreshScriptVarsLib(source) {
+  const seen = new Set();
+  const imports = [];
+  let m;
+  IMPORT_SUITE_CALL_RE.lastIndex = 0;
+  while ((m = IMPORT_SUITE_CALL_RE.exec(source))) {
+    const key = m[1] + " " + m[2];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    imports.push({ flow: m[1], file: m[2] });
+  }
+
+  const monaco = await ensureMonacoLoaded();
+
+  const overloads = await Promise.all(imports.map(async (imp) => {
+    try {
+      const res = await fetch(`/api/scenario-vars?flow=${encodeURIComponent(imp.flow)}&file=${encodeURIComponent(imp.file)}`);
+      const json = await res.json();
+      const names = (json.rows || []).map(r => r.name).filter(Boolean);
+      const identRe = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+      const varsType = names.length
+        ? `{ ${names.map(n => `${identRe.test(n) ? n : JSON.stringify(n)}: string`).join("; ")} } & { [name: string]: string }`
+        : `{ [name: string]: string }`;
+      return `declare function importSuite(flow: ${JSON.stringify(imp.flow)}, file: ${JSON.stringify(imp.file)}): `
+        + `{ vars: ${varsType}; steps(a: number | string, b: number | string): unknown; all(): unknown };`;
+    } catch (e) {
+      return ""; // a suite that fails to load just doesn't get named-var completion this round
+    }
+  }));
+
+  // The generic fallback MUST still be declared here (not left to SCRIPT_DECLARATIONS) - all
+  // overloads of the same function need to live together for TS to consider them as one set in a
+  // predictable order across files.
+  const lib = overloads.filter(Boolean).join("\n")
+    + "\ndeclare function importSuite(flow: string, file: string): Suite;\n";
+
+  if (scriptVarsLibDisposable) scriptVarsLibDisposable.dispose();
+  scriptVarsLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+    lib, "file:///script-imports-live.d.ts");
+}
 
 async function loadScriptList() {
   const res = await fetch("/api/scripts");
@@ -1587,15 +2378,24 @@ async function loadScriptList() {
     item.querySelector(".frename").addEventListener("click", async (e) => { e.stopPropagation(); await deleteScript(s.name); });
     list.appendChild(item);
   });
+  applyScriptFilter();
 }
 
+function applyScriptFilter() {
+  const q = ($("scriptFilter").value || "").trim().toLowerCase();
+  document.querySelectorAll("#scriptList .file-item").forEach(el => {
+    const name = el.querySelector(".fname").textContent.toLowerCase();
+    el.style.display = name.includes(q) ? "" : "none";
+  });
+}
+$("scriptFilter").addEventListener("input", applyScriptFilter);
+
 $("btnNewScript").addEventListener("click", async () => {
-  const name = $("newScriptName").value.trim();
-  if (!name) { toast("Enter a script name"); return; }
-  const res = await fetch("/api/scripts", { method: "POST", body: JSON.stringify({ name }) });
+  const name = prompt("New script name:", "");
+  if (!name || !name.trim()) return;
+  const res = await fetch("/api/scripts", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
   const json = await res.json();
   if (!json.ok) { toast("Error: " + json.error); return; }
-  $("newScriptName").value = "";
   await loadScriptList();
   await selectScript(json.name);
   toast("Created " + json.name);
@@ -1611,6 +2411,7 @@ async function selectScript(name) {
   $("scriptEmptyHint").style.display = "none";
   $("scriptEditor").style.display = "block";
   hideScriptBottomPanel();
+  refreshLastRunIndicator("scripts", name, "scriptLastRunRow", "scriptLastRunTime");
 
   const res = await fetch("/api/scripts/source?name=" + encodeURIComponent(name));
   const json = await res.json();
@@ -1621,7 +2422,11 @@ async function selectScript(name) {
     scriptEditorInstance = monaco.editor.create($("scriptEditor"), {
       value: "", language: "javascript", theme: "vs-dark", automaticLayout: true, minimap: { enabled: false }
     });
-    scriptEditorInstance.onDidChangeModelContent(() => renderScriptImports(scriptEditorInstance.getValue()));
+    scriptEditorInstance.onDidChangeModelContent(() => {
+      const src = scriptEditorInstance.getValue();
+      renderScriptImports(src);
+      scheduleScriptVarsLibRefresh(src);
+    });
   }
   // Declarations are the same fixed importSuite()/Suite/execute() shape for every script (see
   // HttpApi.SCRIPT_DECLARATIONS) - no per-script regeneration needed, but still dispose the
@@ -1631,6 +2436,7 @@ async function selectScript(name) {
     json.declarations, "file:///" + name + ".d.ts");
   scriptEditorInstance.setValue(json.source || "");
   renderScriptImports(json.source || "");
+  refreshScriptVarsLib(json.source || ""); // no debounce needed - this is a one-shot on script open, not a keystroke
   await refreshScriptSessionBadge();
 }
 
@@ -1706,7 +2512,10 @@ $("btnRunScript").addEventListener("click", async () => {
 
   const startRes = await fetch("/api/scripts/run", {
     method: "POST",
-    body: JSON.stringify({ name: currentScript, sessionId: sid, disconnectOnFinish: $("scriptDisconnectOnFinish").checked })
+    body: JSON.stringify({
+      name: currentScript, sessionId: sid, disconnectOnFinish: $("scriptDisconnectOnFinish").checked,
+      stepDelayMs: parseInt($("scriptStepDelayMs").value, 10) || 0
+    })
   });
   const startJson = await startRes.json();
   if (!startJson.ok) { toast("Error: " + startJson.error); return; }
@@ -1714,7 +2523,7 @@ $("btnRunScript").addEventListener("click", async () => {
   $("btnRunScript").disabled = true;
   $("scriptRunningScreen").textContent = "(waiting for screen…)";
   $("scriptRunningConsole").textContent = "(no output yet)";
-  showScriptBottomPanel("scriptRunning");
+  showEditorTab("scriptRunning", $("view-scripts"));
   pollScriptRun(startJson.runId, sid);
 });
 
@@ -1735,6 +2544,10 @@ $("btnCollapseScriptBottomPanel").addEventListener("click", () => {
 
 function pollScriptRun(runId, sid) {
   let shownConsoleLines = 0;
+  const killBtn = $("btnKillScriptRun");
+  killBtn.style.display = "inline-block";
+  killBtn.disabled = false;
+  killBtn.onclick = () => killRun(runId, killBtn);
   const timer = setInterval(async () => {
     const [statusRes, screenRes] = await Promise.all([
       fetch("/api/scenarios/run-status?runId=" + encodeURIComponent(runId)),
@@ -1770,8 +2583,10 @@ function pollScriptRun(runId, sid) {
     if (status.status !== "running") {
       clearInterval(timer);
       $("btnRunScript").disabled = false;
+      killBtn.style.display = "none";
       if (status.status === "error") toast("Run failed: " + status.error);
       else renderScriptResults(status.results);
+      refreshLastRunIndicator("scripts", currentScript, "scriptLastRunRow", "scriptLastRunTime");
     }
   }, 700);
 }
@@ -1793,14 +2608,14 @@ function renderScriptResults(results) {
       `${c.name}: expected "${c.expected}" got "${c.actual}" ${c.passed ? "✓" : "✗"}`
     ).join(" | ") + (r.error ? " ERROR: " + r.error : "");
     const extractedText = Object.entries(r.extracted || {})
-      .map(([k, v]) => Array.isArray(v) ? `${k}=[${v.length} rows: ${v.join(" | ")}]` : `${k}=${v}`).join(", ");
+      .map(([k, v]) => `${k}=${formatExtractedValue(v)}`).join(", ");
     tr.innerHTML = `<td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? "PASS" : "FAIL"}</td>
       <td>${rowText}</td><td>${checksText}</td><td>${extractedText}</td><td></td>`;
     if (r.steps && r.steps.length) {
       const btn = document.createElement("button");
       btn.className = "replay-link";
       btn.textContent = "▶ Replay (" + r.steps.length + ")";
-      btn.addEventListener("click", () => openReplay(r.steps, rowText));
+      btn.addEventListener("click", () => openReplay(r.steps, rowText, { flow: "custom-steps", file: null }));
       tr.lastElementChild.appendChild(btn);
     }
     tbody.appendChild(tr);
@@ -1854,18 +2669,74 @@ function suggestIdentifier(name) {
   return s;
 }
 
+// table-layout:fixed needs explicit widths (see #scenarioTable's CSS) - without this, every
+// column split the row evenly regardless of content, since "td input{width:100%}" gives the
+// browser's auto layout no natural content width to size columns by. "target"/"value" carry the
+// most information (a label string, a typed value) and get the most room; "step"/"id" are short
+// numbers/tags and get the least. Any column not in this map (a future Flow) falls back to an
+// even split of whatever's left.
+const SCENARIO_COLUMN_WIDTHS = { case: "8%", step: "5%", id: "7%", action: "9%", target: "21%", value: "21%", expected: "16%" };
+
 function renderScenarioTable(rows, columns) {
   currentColumns = columns;
+  const table = document.querySelector("#scenarioTable");
   const thead = document.querySelector("#scenarioTable thead");
   const tbody = document.querySelector("#scenarioTable tbody");
+  const known = columns.reduce((sum, c) => sum + (SCENARIO_COLUMN_WIDTHS[c.toLowerCase()] ? parseFloat(SCENARIO_COLUMN_WIDTHS[c.toLowerCase()]) : 0), 0);
+  const unknownCols = columns.filter(c => !SCENARIO_COLUMN_WIDTHS[c.toLowerCase()]);
+  const fallbackWidth = unknownCols.length ? Math.max(4, (87 - known) / unknownCols.length) : 0;
+  const colWidth = c => SCENARIO_COLUMN_WIDTHS[c.toLowerCase()] || fallbackWidth + "%";
+  table.querySelector("colgroup")?.remove();
+  const colgroup = document.createElement("colgroup");
+  colgroup.innerHTML = `<col style="width:3%">${columns.map(c => `<col style="width:${colWidth(c)}">`).join("")}<col style="width:10%">`;
+  table.insertBefore(colgroup, thead);
   thead.innerHTML = "<tr><th></th>" + columns.map(c => `<th>${c}</th>`).join("") + "<th></th></tr>";
   tbody.innerHTML = "";
   rows.forEach(row => addRowToTable(row, columns));
+  applyCaseGrouping();
 }
 
 function addRowToTable(row, columns) {
   const tbody = document.querySelector("#scenarioTable tbody");
   tbody.appendChild(buildScenarioRow(row, columns));
+  applyCaseGrouping();
+}
+
+/** A suite with one case and 20 steps prints the same "case" value 20 times down the column -
+ * pure noise once you can see it repeats. Dims every repeat of the immediately-preceding row's
+ * case value instead of the first occurrence in each run, so a new case still reads clearly. The
+ * cell stays a real, editable input either way - this is a visual pass only, not a data change. */
+function applyCaseGrouping() {
+  if (!currentColumns.some(c => c.toLowerCase() === "case")) return;
+  let prev = null;
+  document.querySelectorAll("#scenarioTable tbody tr").forEach(tr => {
+    const caseInput = tr.querySelector('input[data-col="case"]');
+    if (!caseInput) return;
+    caseInput.classList.toggle("case-repeat", caseInput.value !== "" && caseInput.value === prev);
+    prev = caseInput.value;
+  });
+}
+
+/** A "type" step whose target names a password field (label:Password..., or a ${PASSWORD}-style
+ * var) is showing a real credential in its "value" cell - mask it like a normal password input
+ * instead of always rendering it as plain text. Heuristic, not exhaustive: a step recorded against
+ * a differently-worded field won't be caught, so this is a mitigation, not a guarantee. */
+function looksLikePasswordStep(row) {
+  const action = (row.action || "").toLowerCase();
+  const target = (row.target || "").toLowerCase();
+  return action === "type" && target.includes("password");
+}
+
+/** Turns an already-appended text input into a masked password field with a show/hide toggle -
+ * shared by the Steps grid (looksLikePasswordStep) and the Variables grid (a PASSWORD-named var). */
+function maskAsPassword(td, input) {
+  input.type = "password";
+  const toggle = document.createElement("button");
+  toggle.type = "button"; toggle.className = "small"; toggle.textContent = "👁";
+  toggle.title = "Show/hide value";
+  toggle.style.marginLeft = "4px";
+  toggle.addEventListener("click", () => { input.type = input.type === "password" ? "text" : "password"; });
+  td.appendChild(toggle);
 }
 
 /** Builds one <tr> (grip + data cells + duplicate/delete buttons), fully wired, without
@@ -1884,7 +2755,9 @@ function buildScenarioRow(row, columns) {
     input.value = row[c] || ""; input.dataset.col = c;
     input.autocomplete = "off";
     if (c.toLowerCase() === "command") attachCommandAutocomplete(input, $("scenarioDocsPanel"));
-    td.appendChild(input); tr.appendChild(td);
+    td.appendChild(input);
+    if (c.toLowerCase() === "value" && looksLikePasswordStep(row)) maskAsPassword(td, input);
+    tr.appendChild(td);
   });
   attachStepRowAutocomplete(tr, columns);
 
@@ -1970,6 +2843,7 @@ function renumberSteps() {
     counters[caseId] = (counters[caseId] || 0) + 1;
     stepInput.value = counters[caseId];
   });
+  applyCaseGrouping();
 }
 
 function readScenarioTable() {
@@ -2015,13 +2889,16 @@ $("btnRunScenarios").addEventListener("click", async () => {
 
   const startRes = await fetch("/api/scenarios/run", {
     method: "POST",
-    body: JSON.stringify({ flow: currentFlow, file: currentFile, sessionId: sid, disconnectOnFinish: $("disconnectOnFinish").checked })
+    body: JSON.stringify({
+      flow: currentFlow, file: currentFile, sessionId: sid, disconnectOnFinish: $("disconnectOnFinish").checked,
+      stepDelayMs: parseInt($("stepDelayMs").value, 10) || 0
+    })
   });
   const startJson = await startRes.json();
   if (!startJson.ok) { toast("Error: " + startJson.error); return; }
 
   $("btnRunScenarios").disabled = true;
-  showBottomPanel("running");
+  showEditorTab("running", $("view-scenarios"));
   $("runningScreen").style.display = $("headless").checked ? "none" : "block";
   $("runningSteps").innerHTML = readScenarioTable().map((r, i) => {
     const full = `${r.case || ""} / step ${r.step || ""}: ${r.action || ""} ${r.target || ""} ${r.value ? "= " + r.value : ""}`.trim();
@@ -2041,7 +2918,23 @@ function parseCurrentStep(current) {
   return m ? { case: m[1], step: m[2] } : null;
 }
 
+// Shared by pollRun/pollScriptRun's Kill buttons - posts /api/runs/cancel for whichever runId
+// is currently showing in that Running view, disables the button immediately (cancel is not
+// instant - see RunTracker.cancel()'s doc for why) so a second click can't pile on.
+async function killRun(runId, btn) {
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/runs/cancel", { method: "POST", body: JSON.stringify({ runId }) });
+    const json = await res.json();
+    toast(json.ok && json.cancelled ? "Kill requested" : "Error: " + (json.error || "already finished"));
+  } catch (e) { toast("Error: " + e.message); }
+}
+
 function pollRun(runId, sid, headless) {
+  const killBtn = $("btnKillRun");
+  killBtn.style.display = "inline-block";
+  killBtn.disabled = false;
+  killBtn.onclick = () => killRun(runId, killBtn);
   const timer = setInterval(async () => {
     const calls = [fetch("/api/scenarios/run-status?runId=" + encodeURIComponent(runId))];
     if (!headless) {
@@ -2074,15 +2967,60 @@ function pollRun(runId, sid, headless) {
     if (status.status !== "running") {
       clearInterval(timer);
       $("btnRunScenarios").disabled = false;
+      killBtn.style.display = "none";
       if (status.status === "error") {
         toast("Run failed: " + status.error);
       } else {
         renderResults(status.results);
       }
       loadFileList();
+      refreshLastRunIndicator(currentFlow, currentFile, "lastRunRow", "lastRunTime");
     }
   }, 700);
 }
+
+// ---------- "last run" indicator + disk-backed replay: every run already writes its full replay
+// dump to docs/samples/replays/<flow>/<file>/row-N.json (see ScenarioRunner.writeReplays) AND a
+// last-run.json sidecar (timestamp + scenario count) - this is what actually reaches back into
+// that persisted data instead of only ever showing a Replay button for whatever run just finished
+// in THIS browser tab. Reconstructing `results` from row-N.json and handing it to the existing
+// renderResults()/renderScriptResults() reuses their entire Results table + per-row Replay button,
+// rather than building a second, parallel results UI. ----------
+async function refreshLastRunIndicator(flow, file, rowId, timeId) {
+  const row = $(rowId);
+  try {
+    const res = await fetch(`/api/scenarios/last-run?flow=${encodeURIComponent(flow)}&file=${encodeURIComponent(file)}`);
+    const json = await res.json();
+    if (!json.ok || !json.found) { row.style.display = "none"; return; }
+    $(timeId).textContent = new Date(json.lastRun.timestamp).toLocaleString();
+    row.dataset.flow = flow; row.dataset.file = file; row.dataset.count = json.lastRun.count;
+    row.style.display = "flex";
+  } catch (e) { row.style.display = "none"; }
+}
+
+async function loadLastRunResults(flow, file, count) {
+  const results = [];
+  for (let i = 1; i <= count; i++) {
+    const res = await fetch(`/api/scenarios/replay?flow=${encodeURIComponent(flow)}&file=${encodeURIComponent(file)}&index=${i}`);
+    const json = await res.json();
+    if (json.ok) results.push(json.replay);
+  }
+  return results;
+}
+
+$("btnReplayLastRun").addEventListener("click", async () => {
+  const row = $("lastRunRow");
+  const results = await loadLastRunResults(row.dataset.flow, row.dataset.file, parseInt(row.dataset.count, 10));
+  if (!results.length) { toast("No replay data found"); return; }
+  renderResults(results);
+});
+
+$("btnReplayScriptLastRun").addEventListener("click", async () => {
+  const row = $("scriptLastRunRow");
+  const results = await loadLastRunResults(row.dataset.flow, row.dataset.file, parseInt(row.dataset.count, 10));
+  if (!results.length) { toast("No replay data found"); return; }
+  renderScriptResults(results);
+});
 
 function renderResults(results) {
   showBottomPanel("results");
@@ -2099,14 +3037,14 @@ function renderResults(results) {
       `${c.name}: expected "${c.expected}" got "${c.actual}" ${c.passed ? "✓" : "✗"}`
     ).join(" | ") + (r.error ? " ERROR: " + r.error : "");
     const extractedText = Object.entries(r.extracted || {})
-      .map(([k, v]) => Array.isArray(v) ? `${k}=[${v.length} rows: ${v.join(" | ")}]` : `${k}=${v}`).join(", ");
+      .map(([k, v]) => `${k}=${formatExtractedValue(v)}`).join(", ");
     tr.innerHTML = `<td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? "PASS" : "FAIL"}</td>
       <td>${rowText}</td><td>${checksText}</td><td>${extractedText}</td><td></td>`;
     if (r.steps && r.steps.length) {
       const btn = document.createElement("button");
       btn.className = "replay-link";
       btn.textContent = "▶ Replay (" + r.steps.length + ")";
-      btn.addEventListener("click", () => openReplay(r.steps, rowText));
+      btn.addEventListener("click", () => openReplay(r.steps, rowText, { flow: currentFlow, file: currentFile }));
       tr.lastElementChild.appendChild(btn);
     }
     tbody.appendChild(tr);
@@ -2180,8 +3118,7 @@ async function afterProjectSwitch() {
 
 $("btnProjectSwitch").addEventListener("click", openProjectModal);
 $("projectClose").addEventListener("click", () => $("projectBackdrop").classList.remove("show"));
-$("btnNewProject").addEventListener("click", () => createProject($("newProjectName").value, $("newProjectName")));
-$("newProjectName").addEventListener("keydown", e => { if (e.key === "Enter") createProject(e.target.value, e.target); });
+$("btnNewProject").addEventListener("click", () => createProject(prompt("New project name:", ""), null));
 $("btnFirstProject").addEventListener("click", () => createProject($("firstProjectName").value, $("firstProjectName")));
 $("firstProjectName").addEventListener("keydown", e => { if (e.key === "Enter") createProject(e.target.value, e.target); });
 

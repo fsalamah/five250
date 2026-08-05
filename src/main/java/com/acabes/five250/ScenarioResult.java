@@ -82,6 +82,14 @@ public final class ScenarioResult {
         return this;
     }
 
+    /** Records a 2-D table pulled off a subfile/list screen, e.g. via extract's "table:" target -
+     * each row already split into cells at auto-detected column boundaries (see
+     * StepActions.doExtractTable), so this is a List&lt;List&lt;String&gt;&gt;, not flat text. */
+    public ScenarioResult extractTable(String name, List<List<String>> table) {
+        extracted.put(name, table == null ? List.of() : table);
+        return this;
+    }
+
     public ScenarioResult check(String name, String expected, String actual) {
         checks.add(new Check(name, expected, actual));
         return this;
@@ -121,9 +129,10 @@ public final class ScenarioResult {
     }
 
     /** Flattened for CSV export: original columns + result + one expected/actual pair per check.
-     * A "rows:" extraction (a List, not a single String) is joined with " | " into one cell —
-     * CSV has no native nested-array cell, unlike the JSON output (toMap()), which keeps it as
-     * a real array. */
+     * A "rows:" extraction (a List&lt;String&gt;) is joined with " | " into one cell; a "table:"
+     * extraction (a List&lt;List&lt;String&gt;&gt;) joins cells with " | " and rows with " || " -
+     * CSV has no native nested-array cell, unlike the JSON output (toMap()), which keeps either
+     * as a real array. */
     public Map<String, String> toResultRow() {
         Map<String, String> out = new LinkedHashMap<>(row);
         out.put("result", passed() ? "PASS" : "FAIL");
@@ -133,9 +142,22 @@ public final class ScenarioResult {
             out.put(c.name + "_actual", c.actual);
         }
         for (Map.Entry<String, Object> e : extracted.entrySet()) {
-            Object v = e.getValue();
-            out.put(e.getKey(), v instanceof List ? String.join(" | ", (List<String>) v) : String.valueOf(v));
+            out.put(e.getKey(), flattenForCsv(e.getValue()));
         }
         return out;
+    }
+
+    private static String flattenForCsv(Object v) {
+        if (v instanceof List) {
+            List<?> list = (List<?>) v;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < list.size(); i++) {
+                Object item = list.get(i);
+                if (i > 0) sb.append(item instanceof List ? " || " : " | ");
+                sb.append(flattenForCsv(item));
+            }
+            return sb.toString();
+        }
+        return String.valueOf(v);
     }
 }

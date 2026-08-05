@@ -43,6 +43,18 @@ public final class Variables {
         return out.toString();
     }
 
+    /** Same substitution as substituteRows, but for a single row - used where substitution needs
+     * to happen fresh per-step against a live, mutating vars map (GenericStepFlow.runGroup)
+     * rather than once for a whole file up front. */
+    public static Map<String, String> substitute(Map<String, String> row, Map<String, String> vars) {
+        if (vars.isEmpty()) return row;
+        Map<String, String> substituted = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : row.entrySet()) {
+            substituted.put(e.getKey(), substitute(e.getValue(), vars));
+        }
+        return substituted;
+    }
+
     public static List<Map<String, String>> substituteRows(List<Map<String, String>> rows, Map<String, String> vars) {
         if (vars.isEmpty()) return rows;
         List<Map<String, String>> out = new ArrayList<>();

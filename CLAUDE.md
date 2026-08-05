@@ -439,6 +439,32 @@ target/five250.jar connect ...` call brings both up). Three tabs:
    arguments into a script as variables end to end, not just through
    the daemon's HTTP API directly.
 
+   **Every script gets its own `<name>.bat`/`<name>.sh` pair for free**
+   (`ScriptBatchFiles.java`) — written next to it in `scripts/` the
+   moment it's created (`POST /api/scripts`), self-healed on every
+   Scripts-tab load for a script that predates this feature (`GET
+   /api/scripts`), and removed alongside it on delete. Both are thin
+   wrappers: `<name>.bat --var HOST=pub400.com --var COMMAND=WRKACTJOB`
+   (or `./<name>.sh ...`) forwards every flag straight through to
+   `run-script <name> ...` untouched — unlike a suite's generated
+   `.bat`/`.sh` (`DataDrivenRunner`), which defaults to looping a saved
+   `.data.csv` when called with no flags, a script has no such saved
+   default variable set, so there's nothing to loop and no branching
+   needed. The jar path embedded inside is `Home.file("five250.jar")`'s
+   **absolute** path, resolved once at generation time, deliberately not
+   a `../..`-style relative climb from the script's own directory —
+   `scripts/` sits at a different depth below the jar depending on
+   whether the active project is `"default"` (project root == the jar's
+   own directory) or any other project (`Home.DIR/projects/<name>`, one
+   level deeper), so a single fixed relative path can't be correct for
+   both; an absolute path sidesteps that distinction entirely. Verified
+   live: ran a generated `sc1.bat` directly (no `five250 run-script`
+   typed anywhere) and confirmed it drove a real pub400.com session
+   through to PASS, then ran `cli-args-demo.bat --var HOST=... --var
+   COMMAND=...` and confirmed both values reached `args.HOST`/
+   `args.COMMAND` inside the script exactly as `five250 run-script`
+   itself would have delivered them.
+
    **Monaco editor for scripts, right in the GUI** — the Scripts tab has a
    real Monaco editor (the editor VSCode itself is built on, not a
    re-implementation) with **Save**, **Run**, and **+ Import Suite** (opens

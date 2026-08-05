@@ -73,6 +73,10 @@ import java.util.concurrent.TimeoutException;
  *     scripts/save-data-demo.js for a worked example. Separate from the automatic per-run
  *     results/extracted dump every run already gets - this is for whatever a script computes on
  *     its own that isn't just a suite's "extract" step result.
+ *   - {@code appendCsv(name, rows)} - same as saveCsv, but adds to whatever's already in that
+ *     file instead of overwriting it - built for accumulating one row set per subfile page as
+ *     a script pages through a multi-page list (WRKACTJOB, WRKSPLF, ...) instead of the last
+ *     page's saveCsv call wiping out every earlier page.
  *   - {@code args} - read-only object of values this run was invoked with ({@code five250
  *     run-script &lt;name&gt; --var NAME=VALUE ...}, or the GUI's Run dialog) - NOT the same
  *     channel as an imported suite's own {@code .vars} (a script has no suite of its own);
@@ -133,10 +137,13 @@ final class JsSuiteRunner {
      *                    should use, supplied from outside the script's own source (`five250
      *                    run-script <name> --var NAME=VALUE`, or the GUI's Run dialog), separate
      *                    from an imported suite's own .vars (a script has no suite of its own).
-     *                    Empty (not null) for a run that passed none. */
+     *                    Empty (not null) for a run that passed none.
+     *  @param stepDelayMs configurable gap held after each step execute() runs - see
+     *                    StepActions.executeAction's doc. */
     static ScenarioResult run(SessionService sessionService, String sessionId, String scriptName,
                                File suitesRoot, File extractedRoot, String jsSource,
-                               Map<String, String> scriptArgs, java.util.function.Consumer<String> onLog) {
+                               Map<String, String> scriptArgs, java.util.function.Consumer<String> onLog,
+                               long stepDelayMs) {
         Map<String, String> summary = new LinkedHashMap<>();
         summary.put("case", scriptName);
         ScenarioResult result = new ScenarioResult(summary);
@@ -159,10 +166,11 @@ final class JsSuiteRunner {
                 bindings.putMember("connect", (ProxyExecutable) args -> connect(sessionService, sessionId, args));
                 bindings.putMember("disconnect", (ProxyExecutable) args -> { sessionService.disconnect(sessionId); return null; });
                 bindings.putMember("execute", (ProxyExecutable) args ->
-                    executeRange(sessionService, sessionId, result, scriptName, args));
+                    executeRange(sessionService, sessionId, result, scriptName, args, stepDelayMs));
                 bindings.putMember("importSuite", (ProxyExecutable) args -> importSuite(suitesRoot, args));
                 bindings.putMember("saveJson", (ProxyExecutable) args -> saveJson(extractedRoot, scriptName, args));
                 bindings.putMember("saveCsv", (ProxyExecutable) args -> saveCsv(extractedRoot, scriptName, args));
+                bindings.putMember("appendCsv", (ProxyExecutable) args -> appendCsv(extractedRoot, scriptName, args));
                 bindings.putMember("args", buildArgs(scriptArgs));
                 return context.eval("js", jsSource);
             });
@@ -263,6 +271,42 @@ final class JsSuiteRunner {
         return null;
     }
 
+    /** {@code appendCsv(name, rows)} - same file/shape as saveCsv (same sanitized name, same
+     * "first row's keys are the header" convention), but reads whatever's already at
+     * extractedRoot/scripts/&lt;scriptName&gt;.&lt;name&gt;.csv first (nothing if the file
+     * doesn't exist yet) and writes existing rows + new rows back out together, instead of
+     * overwriting. Built for exactly the paginated-subfile-table case: call it once per page as
+     * you PAGE_DOWN through a WRKACTJOB-style list, and every page's rows accumulate into one
+     * file instead of the last page clobbering everything before it. If a later call's rows have
+     * different keys than the first call's, only the ORIGINAL header's columns are kept (values
+     * for new keys are silently dropped) - keep every call's rows the same shape. */
+    private static Object appendCsv(File extractedRoot, String scriptName, Value[] args) {
+        if (args.length < 2 || !args[0].isString() || !args[1].hasArrayElements()) {
+            throw new RuntimeException("appendCsv(name, rows) needs a string name and an array of row objects");
+        }
+        String name = HttpApi.safeName(args[0].asString());
+        List<Map<String, String>> newRows = new ArrayList<>();
+        long len = args[1].getArraySize();
+        for (long i = 0; i < len; i++) {
+            Object converted = toJavaValue(args[1].getArrayElement(i));
+            if (!(converted instanceof Map)) {
+                throw new RuntimeException("appendCsv: row " + i + " is not an object - got: " + converted);
+            }
+            Map<String, String> row = new LinkedHashMap<>();
+            ((Map<?, ?>) converted).forEach((k, v) -> row.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
+            newRows.add(row);
+        }
+        File file = new File(extractedRoot, "scripts" + File.separator + scriptName + "." + name + ".csv");
+        try {
+            List<Map<String, String>> existing = Csv.read(file); // empty list if the file doesn't exist yet
+            existing.addAll(newRows);
+            Csv.write(file, existing);
+        } catch (Exception e) {
+            throw new RuntimeException("appendCsv: failed to write '" + name + "': " + e.getMessage());
+        }
+        return null;
+    }
+
     /** {@code saveCsv(name, rows)} - writes an array of flat objects to
      * extractedRoot/scripts/&lt;scriptName&gt;.&lt;name&gt;.csv via {@link Csv#write}, header
      * columns taken from the first row's own keys (same "whatever the first row has" convention
@@ -319,15 +363,9 @@ final class JsSuiteRunner {
     }
 
     private static Object executeRange(SessionService sessionService, String sessionId, ScenarioResult result,
-                                        String scriptName, Value[] args) {
+                                        String scriptName, Value[] args, long stepDelayMs) {
         if (args.length == 0 || !args[0].isHostObject() || !(args[0].asHostObject() instanceof RowRange)) {
             throw new RuntimeException("execute() expects a range returned by <suite>.steps(a, b) or <suite>.all()");
-        }
-        Terminal t;
-        try {
-            t = sessionService.getSession(sessionId);
-        } catch (RuntimeException e) {
-            throw new RuntimeException("execute() needs a live session - call connect(host, port) first: " + e.getMessage());
         }
         RowRange range = (RowRange) args[0].asHostObject();
         List<Map<String, String>> substituted = Variables.substituteRows(range.rows, range.vars);
@@ -341,9 +379,63 @@ final class JsSuiteRunner {
             String label = range.suiteName + " step " + stepNo + ": " + action
                 + (target.isEmpty() ? "" : " " + target) + (value.isEmpty() ? "" : " = " + value);
             Progress.report(scriptName + " - " + label);
-            StepActions.executeAction(t, result, range.vars, row, stepNo, label);
+
+            // A recorded suite's own "connect" step (from a live Connect click while recording)
+            // can be replayed directly through execute() too, exactly like a plain CSV suite run
+            // already auto-connects from its own "connect" pseudo-case (see
+            // HttpApi.autoConnectIfNeeded) - a script isn't FORCED to always open the session
+            // itself via the top-level connect() global just because a range it's executing
+            // happens to carry one from how it was recorded. StepActions.executeAction has no
+            // "connect" case (it never needed one - HttpApi always stripped that row before a
+            // plain suite run ever reached it), so without this, execute() hit "Unknown action
+            // 'connect'" for exactly this recording. "disconnect" already has a case there and
+            // needs no equivalent handling here.
+            if ("connect".equalsIgnoreCase(action)) {
+                connectIfNeeded(sessionService, sessionId, row);
+                continue;
+            }
+
+            Terminal t;
+            try {
+                t = sessionService.getSession(sessionId);
+            } catch (RuntimeException e) {
+                throw new RuntimeException("execute() needs a live session - call connect(host, port) first, "
+                    + "or include a recorded 'connect' step in this range: " + e.getMessage());
+            }
+            StepActions.executeAction(t, result, range.vars, row, stepNo, label, stepDelayMs);
         }
         return null;
+    }
+
+    /** Mirrors HttpApi.autoConnectIfNeeded's actual connect logic (not the row-stripping part -
+     * executeRange's loop handles that itself, via "continue"): target=host, value=port,
+     * expected="true" for SSL, same as a plain suite's own "connect" pseudo-case. No-ops if the
+     * session is already actually connected, so a range with its own "connect" step still works
+     * whether or not the script (or an earlier execute() call) already opened the session. */
+    private static void connectIfNeeded(SessionService sessionService, String sessionId, Map<String, String> connectRow) {
+        if (sessionService.isActuallyConnected(sessionId)) return;
+        sessionService.forget(sessionId);
+        String host = connectRow.getOrDefault("target", "").trim();
+        if (host.isEmpty()) throw new RuntimeException("connect step has no target host");
+        long port = 23;
+        try {
+            String v = connectRow.getOrDefault("value", "").trim();
+            if (!v.isEmpty()) port = Long.parseLong(v);
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("connect step's value must be a port number, got: " + connectRow.get("value"));
+        }
+        boolean ssl = "true".equalsIgnoreCase(connectRow.getOrDefault("expected", "").trim());
+
+        Map<String, Object> connectReq = new LinkedHashMap<>();
+        connectReq.put("cmd", "connect");
+        connectReq.put("sessionId", sessionId);
+        connectReq.put("host", host);
+        connectReq.put("port", port);
+        connectReq.put("ssl", ssl);
+        Map<String, Object> resp = sessionService.handle(connectReq);
+        if (!Boolean.TRUE.equals(resp.get("ok"))) {
+            throw new RuntimeException("connect failed: " + resp.get("error"));
+        }
     }
 
     private static ProxyObject buildSuiteObject(String suiteName, List<Map<String, String>> ordered, Map<String, String> vars) {

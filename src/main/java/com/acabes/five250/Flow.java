@@ -36,8 +36,12 @@ public interface Flow {
         return null;
     }
 
-    /** Runs one scenario for a grouped flow: an ordered sequence of CSV rows sharing one group id. */
-    default ScenarioResult runGroup(Terminal t, String groupId, List<Map<String, String>> steps) {
+    /** Runs one scenario for a grouped flow: an ordered sequence of CSV rows sharing one group id.
+     * vars is LIVE and shared across every group in this run (not a fresh copy per group) - an
+     * "extract" step in an earlier case updates it immediately, so a later case's ${NAME} can see
+     * it, the same way a script's suite.vars already works across execute() calls. stepDelayMs is
+     * the configurable gap held after each step - see StepActions.executeAction's doc. */
+    default ScenarioResult runGroup(Terminal t, String groupId, List<Map<String, String>> steps, Map<String, String> vars, long stepDelayMs) {
         throw new UnsupportedOperationException(name() + " is a per-row flow; use run()");
     }
 

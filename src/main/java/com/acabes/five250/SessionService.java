@@ -16,6 +16,11 @@ public final class SessionService {
 
     private final Map<String, Terminal> sessions = new ConcurrentHashMap<>();
     private final Map<String, RecordingState> recordings = new ConcurrentHashMap<>();
+    /** In-memory, per-session named variables set by the GUI's Extract Area/Extract Table
+     * buttons when used OUTSIDE recording (see "extract-now" below) — an immediate value, not a
+     * recorded suite step. Session-scoped and gone once the process restarts; nothing persists
+     * these to disk, same as the terminal session itself. */
+    private final Map<String, Map<String, Object>> sessionVars = new ConcurrentHashMap<>();
 
     public Terminal getSession(String sessionId) {
         Terminal t = sessions.get(sessionId);
@@ -43,6 +48,16 @@ public final class SessionService {
     public void disconnect(String sessionId) {
         Terminal t = sessions.remove(sessionId);
         if (t != null) t.disconnect();
+    }
+
+    /** Like disconnect(), but for RunTracker.cancel() specifically — calls Terminal.forceClose()
+     * instead of the normal (synchronized) disconnect(). A run being killed is, by definition,
+     * possibly stuck inside a synchronized Terminal call right now; going through the ordinary
+     * disconnect() would just queue up behind it on the same monitor and never actually run
+     * until whatever's stuck gives up on its own. See Terminal.forceClose()'s doc. */
+    public void forceDisconnect(String sessionId) {
+        Terminal t = sessions.remove(sessionId);
+        if (t != null) t.forceClose();
     }
 
     public Map<String, String> sessionStatuses() {
@@ -141,7 +156,16 @@ public final class SessionService {
                     String keyName = str(req, "key", null);
                     KeyMnemonic key = KeyMap.resolve(keyName);
                     t.sendKey(key);
-                    t.waitReady(DEFAULT_TIMEOUT_MS);
+                    // Only an AID key (ENTER, PF1-24, ...) actually transmits to the host and has
+                    // a response worth waiting for. A purely local key (BACK_SPACE, cursor
+                    // movement, DELETE, ...) never leaves the client, so there's nothing to wait
+                    // for - and waiting anyway risked a real 15-SECOND HANG on exactly the
+                    // backspace-past-a-field's-start case this whole thing is about: tn5250j's
+                    // keyboard-locked flag from that local X-error doesn't reliably clear within
+                    // any bounded window, so waitReady() would spin its full timeout for nothing.
+                    if (Terminal.transmitsToHost(key)) {
+                        t.waitReady(DEFAULT_TIMEOUT_MS);
+                    }
                     Map<String, Object> resp = ok(t.snapshot());
                     RecordingState rec = recordings.get(sid);
                     if (rec != null) {
@@ -199,6 +223,19 @@ public final class SessionService {
                     return ok(Map.of("recordedRow", row));
                 }
 
+                // Generic manual step insert - the "+ Add step..." button in the recording
+                // toolbar. Check/Extract/Extract Area/Extract Table are all really this same
+                // primitive (insert a row into the pending recording) specialized to one action;
+                // this is the general form for anything else (a "type" step referencing a var
+                // via ${NAME}, a "wait", a hand-written "key", ...) without live-driving the
+                // actual terminal for it.
+                case "record-mark-step": {
+                    RecordingState rec = requireRecording(sessionId(req));
+                    Map<String, String> row = rec.add(str(req, "action", ""), str(req, "target", ""),
+                        str(req, "value", ""), str(req, "expected", ""));
+                    return ok(Map.of("recordedRow", row));
+                }
+
                 case "record-mark-extract": {
                     RecordingState rec = requireRecording(sessionId(req));
                     Map<String, String> row = rec.add("extract", str(req, "target", ""), str(req, "name", ""), "");
@@ -214,6 +251,35 @@ public final class SessionService {
 
                 case "record-discard": {
                     recordings.remove(sessionId(req));
+                    return ok(Map.of());
+                }
+
+                // The GUI's Extract Area/Extract Table drag-select, used OUTSIDE recording (while
+                // recording, the same drag instead calls record-mark-extract to save a suite
+                // step - this command is for grabbing a value RIGHT NOW into an in-memory
+                // variable you can immediately reuse, save, or inspect via "session-vars").
+                case "extract-now": {
+                    String sid = sessionId(req);
+                    Terminal t = getSession(sid);
+                    String target = str(req, "target", "");
+                    String name = str(req, "name", "");
+                    if (target.isBlank() || name.isBlank()) {
+                        throw new IllegalArgumentException("extract-now requires 'target' and 'name'");
+                    }
+                    Object value = StepActions.extractByTarget(t, target);
+                    sessionVars.computeIfAbsent(sid, k -> new LinkedHashMap<>()).put(name, value);
+                    return ok(Map.of("value", value));
+                }
+
+                case "session-vars": {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("vars", sessionVars.getOrDefault(sessionId(req), Map.of()));
+                    return ok(m);
+                }
+
+                case "session-var-delete": {
+                    Map<String, Object> vars = sessionVars.get(sessionId(req));
+                    if (vars != null) vars.remove(str(req, "name", ""));
                     return ok(Map.of());
                 }
 
