@@ -33,6 +33,7 @@ public final class Daemon {
 
     private void run() throws IOException {
         TN5250jLogFactory.setLogLevels(TN5250jLogger.WARN);
+        Home.stampJar(); // see Home.jarStaleReason()
 
         new HttpApi(sessionService).start();
 

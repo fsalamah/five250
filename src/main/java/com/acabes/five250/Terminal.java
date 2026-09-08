@@ -31,11 +31,24 @@ public final class Terminal {
     }
 
     public synchronized void connect(String host, int port, boolean ssl, long timeoutMs) {
+        connect(host, port, ssl, false, timeoutMs);
+    }
+
+    /** wide requests the real 5250 "27x132 extended" screen size (tn5250j's
+     * TN5250jConstants.SESSION_SCREEN_SIZE=1, vs. the default "0" for 24x80) instead of just
+     * rendering the normal 24x80 buffer bigger - the host has to actually support/grant the wider
+     * device too (most IBM i systems do); it silently stays 24x80 if the host doesn't. Every row/
+     * col call in this class already reads screen.getColumns()/getRows() live rather than a
+     * hardcoded 80/24, so nothing else needs to change once the host grants the wider screen. */
+    public synchronized void connect(String host, int port, boolean ssl, boolean wide, long timeoutMs) {
         Properties props = new Properties();
         props.setProperty("SESSION_HOST", host);
         props.setProperty("SESSION_HOST_PORT", String.valueOf(port));
         if (ssl) {
             props.setProperty("-sslType", "TLS");
+        }
+        if (wide) {
+            props.setProperty("SESSION_SCREEN_SIZE", "1");
         }
 
         SessionConfig cfg = new SessionConfig("five250-" + sessionId, "five250-" + sessionId);

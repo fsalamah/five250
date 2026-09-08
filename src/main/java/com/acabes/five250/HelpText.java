@@ -27,7 +27,7 @@ public final class HelpText {
 
         ENTRIES.put("connect", new Entry(
             "Open a live 5250 session to an IBM i host",
-            "five250 connect --host <host> [--port <port>] [--ssl] [--session <id>]",
+            "five250 connect --host <host> [--port <port>] [--ssl] [--wide] [--session <id>]",
             "Opens a socket to the host, negotiates the 5250 data stream, and waits until the "
                 + "first screen (usually sign-on) is fully painted and the keyboard unlocks. "
                 + "Starts the background daemon automatically on first use - it holds the live "
@@ -37,6 +37,7 @@ public final class HelpText {
                 "--host      Hostname or IP of the IBM i system (required)",
                 "--port      Telnet port. Default 23, or 992 if --ssl is given",
                 "--ssl       Use SSL/TLS. Known issue: hangs mid-handshake in this build - use plain port 23",
+                "--wide      Request the 27x132 extended screen size instead of 24x80 - the host has to support/grant it too; silently stays 24x80 if it doesn't",
                 "--session   Session id, for running multiple concurrent sessions. Default 'default'"
             ),
             List.of(

@@ -72,10 +72,24 @@ public final class SessionService {
         String cmd = str(req, "cmd", null);
         if (cmd == null) return errorResponse(new IllegalArgumentException("missing 'cmd'"));
 
+        // A daemon whose jar was rebuilt underneath it can't safely do anything that might load
+        // a class it hasn't loaded yet - refuse with the real reason instead of letting the next
+        // lazy class load blow up with an opaque NoClassDefFoundError. ping/shutdown stay
+        // available so the CLI can detect the situation and restart it (Cli.ensureDaemonRunning).
+        if (!cmd.equals("ping") && !cmd.equals("shutdown")) {
+            String stale = Home.jarStaleReason();
+            if (stale != null) return errorResponse(new IllegalStateException(stale));
+        }
+
         try {
             switch (cmd) {
-                case "ping":
-                    return ok(Map.of("pong", true));
+                case "ping": {
+                    Map<String, Object> pong = new LinkedHashMap<>();
+                    pong.put("pong", true);
+                    pong.put("jarMtime", Home.stampedJarMtime());
+                    pong.put("stale", Home.jarStaleReason() != null);
+                    return ok(pong);
+                }
 
                 case "shutdown": {
                     Map<String, Object> r = ok(Map.of());
@@ -88,8 +102,9 @@ public final class SessionService {
                     String host = str(req, "host", null);
                     long port = num(req, "port", 23);
                     boolean ssl = bool(req, "ssl", false);
+                    boolean wide = bool(req, "wide", false);
                     Terminal t = new Terminal(sid);
-                    t.connect(host, (int) port, ssl, DEFAULT_TIMEOUT_MS);
+                    t.connect(host, (int) port, ssl, wide, DEFAULT_TIMEOUT_MS);
                     sessions.put(sid, t);
                     Map<String, Object> resp = ok(t.snapshot());
                     RecordingState rec = recordings.get(sid);

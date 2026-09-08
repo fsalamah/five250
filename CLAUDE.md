@@ -117,6 +117,24 @@ next clean build. When iterating in the dev tree, always launch with
 built jar up to the project root first (matching how the actual packaged
 distribution is laid out — jar and its projects as siblings).
 
+**Rebuilding the jar while the daemon is up** (`Home.jarStaleReason`): the
+daemon loads classes lazily from `five250.jar` and stays up across commands,
+and on Windows `mvn package` silently rewrites `target/five250.jar` in place
+underneath it. The next class it hasn't loaded yet then comes out of a zip
+that no longer matches what its classloader indexed - and for a script run
+that class is GraalJS's `Engine$ImplHolder`, whose static initializer fails
+once and then reports `Could not initialize class
+org.graalvm.polyglot.Engine$ImplHolder` on every run after that, with no
+hint that a rebuild caused it (reproduced live exactly this way). The daemon
+now stamps its jar's size+mtime at startup: once they change, the TCP
+protocol, `/api/scenarios/run` and `/api/scripts/run` refuse with a message
+naming both build times and saying to restart (`ping`/`shutdown` still
+work), and the CLI's `ensureDaemonRunning` sees `stale:true` in the ping
+reply and transparently shuts the old daemon down and starts a fresh one
+(dropping live sessions - it prints a one-line notice). The GUI can't restart
+the daemon for you: after a rebuild, run any `five250` command (or relaunch
+`java -jar five250.jar`) before clicking Run again.
+
 **CI / headless**: `five250 run-suite --flow F --file N [--var NAME=VALUE ...]`
 drives a suite exactly like clicking Run All, prints each step + PASS/FAIL,
 and exits 0/1/2/3 (pass/fail/run-error/timeout) — a real CI gate. `--var`

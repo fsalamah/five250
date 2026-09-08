@@ -95,7 +95,10 @@ final class StepActions {
                 } else if (target.startsWith("rows:")) {
                     List<String> rows = doExtractRows(t, target);
                     result.extractRows(name, rows);
-                    if (vars != null) vars.put(name, String.join(" | ", rows));
+                    // Real "\n" between rows, matching flattenTable()'s "table:" treatment just
+                    // above - a script reading suite.vars.NAME (saveJson, console.log, ...) gets
+                    // the box back as genuine multi-line text, not " | "-joined onto one line.
+                    if (vars != null) vars.put(name, String.join("\n", rows));
                 } else {
                     String extracted = doCheck(t, target);
                     result.extract(name, extracted);

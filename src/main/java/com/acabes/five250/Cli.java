@@ -2,9 +2,12 @@ package com.acabes.five250;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
@@ -21,6 +24,17 @@ import java.util.Map;
 public final class Cli {
 
     public static void main(String[] args) throws Exception {
+        // Windows console output does NOT default to UTF-8 (JEP 400 keeps the native/OEM
+        // codepage for System.out/System.err even though file.encoding is UTF-8), so any
+        // non-ASCII screen text - Arabic in particular - comes out as mojibake or "?" when
+        // printed here, even though it's correctly UTF-8 everywhere else in the stack (HTTP,
+        // the daemon's TCP protocol, CSV/JSON on disk). Force both streams to UTF-8 explicitly
+        // rather than relying on stdout.encoding/the console's codepage. The terminal itself
+        // still needs a UTF-8 codepage (see packaging/five250.bat's "chcp 65001") and a font
+        // with Arabic glyphs (Windows Terminal, not legacy conhost raster fonts) to render it.
+        System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, StandardCharsets.UTF_8));
+
         // Running the jar plain (no command) or "serve" both just bring up the daemon + GUI and
         // stop there — for someone who wants to do everything (Connect included) from the
         // browser instead of the CLI, requiring a full "connect --host --port" first just to
@@ -71,6 +85,7 @@ public final class Cli {
                 req.put("host", require(opts, "host"));
                 req.put("port", Long.parseLong(opts.getOrDefault("port", opts.containsKey("ssl") ? "992" : "23")));
                 req.put("ssl", opts.containsKey("ssl"));
+                req.put("wide", opts.containsKey("wide"));
                 break;
             case "signon":
                 req.put("cmd", "signon");
@@ -188,7 +203,17 @@ public final class Cli {
     }
 
     private static void ensureDaemonRunning() throws Exception {
-        if (ping()) return;
+        Map<String, Object> pong = ping();
+        if (pong != null) {
+            if (!Boolean.TRUE.equals(pong.get("stale"))) return;
+            // The daemon's jar was rebuilt underneath it (see Home.jarStaleReason()) - it can't
+            // load anything new, so every real command would fail. Restart it here, once,
+            // rather than making the user discover "five250 shutdown" from an opaque error.
+            System.err.println("five250.jar changed since the daemon started - restarting the daemon (live sessions are dropped)");
+            try { send(Map.of("cmd", "shutdown")); } catch (IOException ignored) { /* already going down */ }
+            long gone = System.currentTimeMillis() + 5000;
+            while (System.currentTimeMillis() < gone && ping() != null) Thread.sleep(150);
+        }
 
         String jarPath = new File(Cli.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getAbsolutePath();
         String javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
@@ -201,23 +226,25 @@ public final class Cli {
 
         long deadline = System.currentTimeMillis() + 8000;
         while (System.currentTimeMillis() < deadline) {
-            if (ping()) return;
+            if (ping() != null) return;
             Thread.sleep(150);
         }
         throw new IOException("Could not start five250 daemon (see " + logFile + ")");
     }
 
-    private static boolean ping() {
+    /** The daemon's ping response ({@code pong}, {@code jarMtime}, {@code stale}), or null if no daemon answers. */
+    private static Map<String, Object> ping() {
         try (Socket s = new Socket()) {
             s.connect(new InetSocketAddress("127.0.0.1", Daemon.PORT), 300);
             try (PrintWriter out = new PrintWriter(s.getOutputStream(), true, StandardCharsets.UTF_8);
                  BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8))) {
                 out.println("{\"cmd\":\"ping\"}");
                 String line = in.readLine();
-                return line != null && line.contains("\"ok\":true");
+                if (line == null || !line.contains("\"ok\":true")) return null;
+                return Json.parseObject(line);
             }
-        } catch (IOException e) {
-            return false;
+        } catch (Exception e) {
+            return null;
         }
     }
 

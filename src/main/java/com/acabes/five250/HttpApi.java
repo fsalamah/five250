@@ -63,6 +63,21 @@ public final class HttpApi {
         System.out.println("five250 GUI at http://127.0.0.1:" + PORT);
     }
 
+    /**
+     * A suite/script run is exactly the kind of work that first touches classes the daemon has
+     * never loaded (GraalJS above all) - if five250.jar was rebuilt while this daemon kept
+     * running, that load fails with an opaque NoClassDefFoundError and, for scripts, poisons
+     * Engine$ImplHolder's static init permanently. Refuse up front with the actual reason
+     * instead. See Home.jarStaleReason(); /api/rpc gets the same check inside
+     * SessionService.handle.
+     */
+    private boolean refuseIfJarStale(HttpExchange ex) throws IOException {
+        String stale = Home.jarStaleReason();
+        if (stale == null) return false;
+        sendJson(ex, 409, Map.of("ok", false, "error", stale));
+        return true;
+    }
+
     // ---------- /api/rpc : generic terminal control, same protocol as the TCP daemon ----------
 
     private void handleRpc(HttpExchange ex) throws IOException {
@@ -350,6 +365,7 @@ public final class HttpApi {
             sendJson(ex, 405, Map.of("ok", false, "error", "POST only"));
             return;
         }
+        if (refuseIfJarStale(ex)) return;
         Map<String, Object> req = Json.parseObject(readBody(ex));
         String flowName = (String) req.get("flow");
         String fileName = safeName((String) req.get("file"));
@@ -838,6 +854,7 @@ public final class HttpApi {
             sendJson(ex, 405, Map.of("ok", false, "error", "POST only"));
             return;
         }
+        if (refuseIfJarStale(ex)) return;
         Map<String, Object> req = Json.parseObject(readBody(ex));
         String name = safeName((String) req.get("name"));
         String sessionId = req.getOrDefault("sessionId", "default").toString();
