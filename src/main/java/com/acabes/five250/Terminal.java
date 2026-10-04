@@ -31,8 +31,61 @@ public final class Terminal {
     }
 
     public synchronized void connect(String host, int port, boolean ssl, long timeoutMs) {
-        connect(host, port, ssl, false, timeoutMs);
+        connect(host, port, ssl, false, null, timeoutMs);
     }
+
+    public synchronized void connect(String host, int port, boolean ssl, boolean wide, long timeoutMs) {
+        connect(host, port, ssl, wide, null, timeoutMs);
+    }
+
+    /** Env var naming the code page every connect uses when the caller doesn't pass one - lets a
+     * whole install (recorded suites, scripts, the GUI) target e.g. an Arabic host without
+     * editing each connect call. */
+    static final String CODEPAGE_ENV = "FIVE250_CODEPAGE";
+
+    /**
+     * Resolves which host code page (EBCDIC CCSID) a connect should use: the explicit request,
+     * else the FIVE250_CODEPAGE env var, else null (tn5250j's own default, CCSID 37 - US
+     * English). Validated here because tn5250j itself does NOT fail on a name it can't resolve:
+     * CharMappings.getCodePage silently falls back to CCSID 37, which is exactly the "Arabic
+     * screen comes back as accented-Latin garbage" symptom this option exists to fix - a typo'd
+     * or unavailable code page has to be a loud connect error, not more garbage.
+     *
+     * tn5250j ships built-in tables for a fixed list of Latin/Cyrillic/Greek/Hebrew CCSIDs
+     * (CharMappings.getAvailableCodePages()); anything else - Arabic 420 included - goes through
+     * the JDK's own charset of that name, which lives in the jdk.charsets module (part of every
+     * full JDK, and added to the jlink'd dist runtime in pom.xml for this reason).
+     */
+    static String resolveCodePage(String requested) {
+        String cp = requested == null ? "" : requested.trim();
+        if (cp.isEmpty()) {
+            String env = System.getenv(CODEPAGE_ENV);
+            cp = env == null ? "" : env.trim();
+        }
+        if (cp.isEmpty()) return null;
+        // "CCSID420"/"ccsid 420"/"cp420" -> "420": tn5250j's built-in tables are keyed by the
+        // bare number, and the JDK accepts the bare number as an alias for its IBMnnn charsets.
+        String bare = cp.replaceFirst("(?i)^(ccsid|cp|ibm)[\\s_-]*(?=\\d)", "");
+        for (String builtIn : org.tn5250j.encoding.CharMappings.getAvailableCodePages()) {
+            if (builtIn.equalsIgnoreCase(bare)) return builtIn;
+        }
+        for (String candidate : new String[] {bare, "Cp" + bare, cp}) {
+            try {
+                if (java.nio.charset.Charset.isSupported(candidate)) return candidate;
+            } catch (IllegalArgumentException ignored) {
+                // not even a legal charset name - try the next spelling
+            }
+        }
+        throw new IllegalArgumentException("Unsupported code page '" + cp + "'. Use an EBCDIC CCSID number, "
+            + "e.g. 37 (US English, the default), 420 (Arabic), 424 (Hebrew), 500 (International), 1140 (US + euro).");
+    }
+
+    /** The code page this session was connected with ("37" when none was requested). */
+    public synchronized String codePage() {
+        return codePage;
+    }
+
+    private String codePage = "37";
 
     /** wide requests the real 5250 "27x132 extended" screen size (tn5250j's
      * TN5250jConstants.SESSION_SCREEN_SIZE=1, vs. the default "0" for 24x80) instead of just
@@ -40,7 +93,8 @@ public final class Terminal {
      * device too (most IBM i systems do); it silently stays 24x80 if the host doesn't. Every row/
      * col call in this class already reads screen.getColumns()/getRows() live rather than a
      * hardcoded 80/24, so nothing else needs to change once the host grants the wider screen. */
-    public synchronized void connect(String host, int port, boolean ssl, boolean wide, long timeoutMs) {
+    public synchronized void connect(String host, int port, boolean ssl, boolean wide, String codePage, long timeoutMs) {
+        String resolvedCodePage = resolveCodePage(codePage); // throws before any socket is opened
         Properties props = new Properties();
         props.setProperty("SESSION_HOST", host);
         props.setProperty("SESSION_HOST_PORT", String.valueOf(port));
@@ -50,6 +104,10 @@ public final class Terminal {
         if (wide) {
             props.setProperty("SESSION_SCREEN_SIZE", "1");
         }
+        if (resolvedCodePage != null) {
+            props.setProperty("SESSION_CODE_PAGE", resolvedCodePage);
+        }
+        this.codePage = resolvedCodePage == null ? "37" : resolvedCodePage;
 
         SessionConfig cfg = new SessionConfig("five250-" + sessionId, "five250-" + sessionId);
         session = new Session5250(props, "five250-" + sessionId, "five250-" + sessionId, cfg);

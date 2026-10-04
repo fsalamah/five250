@@ -114,6 +114,19 @@ public final class ScenarioRunner {
      * "rows:" range (a List) is one line per row; a single value is one line. If more than one
      * scenario in this run produced the same name, each occurrence is one more line, in run order.
      */
+    /** Writes every "screenshot" step's PNG as {@code <dir>/<baseName>.<name>[.<ts>].png} - same
+     * naming scheme writeExtractedDumps uses for .data.txt, so a run's latest screenshots sit at
+     * a stable path and each run also keeps its own timestamped copy. */
+    public static void writeScreenshots(File dir, String baseName, String ts, List<ScenarioResult> results) throws IOException {
+        for (ScenarioResult r : results) {
+            for (Map.Entry<String, byte[]> e : r.screenshots.entrySet()) {
+                dir.mkdirs();
+                String fileName = baseName + "." + e.getKey() + (ts == null ? "" : "." + ts) + ".png";
+                java.nio.file.Files.write(new File(dir, fileName).toPath(), e.getValue());
+            }
+        }
+    }
+
     public static void writeExtractedDumps(File dir, String baseName, String ts, List<ScenarioResult> results) throws IOException {
         Map<String, List<String>> lines = new LinkedHashMap<>();
         for (ScenarioResult r : results) {

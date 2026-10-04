@@ -74,7 +74,10 @@ public final class RecordingState {
     }
 
     /** Records a "connect" step in its own case="setup", ahead of the recorded case — at most once. */
-    public synchronized Map<String, String> addConnectOnce(String host, long port, boolean ssl) {
+    /** codePage is only non-null when the live connect explicitly asked for one - it's written
+     * into the row's "expected" cell ("codepage=420", or "true;codepage=420" with SSL) so replay
+     * decodes the host's screens the same way the recording session did. */
+    public synchronized Map<String, String> addConnectOnce(String host, long port, boolean ssl, String codePage) {
         if (connectRow != null) return null;
         connectRow = new LinkedHashMap<>();
         connectRow.put("case", "setup");
@@ -82,7 +85,9 @@ public final class RecordingState {
         connectRow.put("action", "connect");
         connectRow.put("target", host);
         connectRow.put("value", String.valueOf(port));
-        connectRow.put("expected", ssl ? "true" : "");
+        String expected = ssl ? "true" : "";
+        if (codePage != null) expected += (expected.isEmpty() ? "" : ";") + "codepage=" + codePage;
+        connectRow.put("expected", expected);
         return connectRow;
     }
 

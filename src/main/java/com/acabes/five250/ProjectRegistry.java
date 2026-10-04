@@ -121,6 +121,7 @@ public final class ProjectRegistry {
     public static File scriptsDir()   { return new File(current().root, "scripts"); }
     public static File resultsDir()   { return new File(current().root, "results"); }
     public static File extractedDir() { return new File(current().root, "extracted"); }
+    public static File screenshotsDir() { return new File(current().root, "screenshots"); }
     public static File failuresDir()  { return new File(current().root, "docs/samples/failures"); }
     public static File replaysDir()   { return new File(current().root, "docs/samples/replays"); }
 

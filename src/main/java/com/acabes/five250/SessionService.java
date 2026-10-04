@@ -103,13 +103,20 @@ public final class SessionService {
                     long port = num(req, "port", 23);
                     boolean ssl = bool(req, "ssl", false);
                     boolean wide = bool(req, "wide", false);
+                    // Host code page (EBCDIC CCSID, e.g. 420 for Arabic); blank = FIVE250_CODEPAGE
+                    // env var, else CCSID 37. A number is accepted too (JSON 420 vs "420").
+                    Object rawCodePage = req.get("codepage");
+                    String codePage = rawCodePage instanceof Number
+                        ? String.valueOf(((Number) rawCodePage).longValue())
+                        : rawCodePage == null ? null : String.valueOf(rawCodePage);
                     Terminal t = new Terminal(sid);
-                    t.connect(host, (int) port, ssl, wide, DEFAULT_TIMEOUT_MS);
+                    t.connect(host, (int) port, ssl, wide, codePage, DEFAULT_TIMEOUT_MS);
                     sessions.put(sid, t);
                     Map<String, Object> resp = ok(t.snapshot());
+                    resp.put("codepage", t.codePage());
                     RecordingState rec = recordings.get(sid);
                     if (rec != null) {
-                        Map<String, String> row = rec.addConnectOnce(host, port, ssl);
+                        Map<String, String> row = rec.addConnectOnce(host, port, ssl, codePage == null || codePage.isBlank() ? null : t.codePage());
                         if (row != null) resp.put("recordedRow", row);
                     }
                     return resp;
@@ -130,6 +137,36 @@ public final class SessionService {
                     Terminal t = getSession(sessionId(req));
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("fields", t.fieldsList());
+                    return ok(m);
+                }
+
+                case "screenshot": {
+                    // Renders the current screen to a PNG file (ScreenImage - drawn off-screen
+                    // from the character buffer, so it needs no window/browser/display).
+                    // "path" is where to write it; the CLI resolves --out against ITS OWN working
+                    // directory and sends an absolute path, since this daemon's cwd is wherever
+                    // it happened to be started from. Without one it lands in the active
+                    // project's screenshots/ folder under a timestamped name.
+                    String sid = sessionId(req);
+                    Terminal t = getSession(sid);
+                    byte[] png = ScreenImage.png(t.snapshot());
+                    String path = str(req, "path", null);
+                    java.io.File file;
+                    if (path == null || path.isBlank()) {
+                        String ts = java.time.LocalDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"));
+                        file = new java.io.File(ProjectRegistry.screenshotsDir(), HttpApi.safeName(sid) + "." + ts + ".png");
+                    } else {
+                        file = new java.io.File(path);
+                        if (!file.isAbsolute()) file = new java.io.File(ProjectRegistry.screenshotsDir(), path);
+                        if (!file.getName().toLowerCase().endsWith(".png")) file = new java.io.File(file.getPath() + ".png");
+                    }
+                    java.io.File parent = file.getAbsoluteFile().getParentFile();
+                    if (parent != null) parent.mkdirs();
+                    java.nio.file.Files.write(file.toPath(), png);
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("path", file.getAbsolutePath());
+                    m.put("bytes", (long) png.length);
                     return ok(m);
                 }
 

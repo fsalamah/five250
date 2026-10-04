@@ -27,7 +27,7 @@ public final class HelpText {
 
         ENTRIES.put("connect", new Entry(
             "Open a live 5250 session to an IBM i host",
-            "five250 connect --host <host> [--port <port>] [--ssl] [--wide] [--session <id>]",
+            "five250 connect --host <host> [--port <port>] [--ssl] [--wide] [--codepage <ccsid>] [--session <id>]",
             "Opens a socket to the host, negotiates the 5250 data stream, and waits until the "
                 + "first screen (usually sign-on) is fully painted and the keyboard unlocks. "
                 + "Starts the background daemon automatically on first use - it holds the live "
@@ -38,10 +38,12 @@ public final class HelpText {
                 "--port      Telnet port. Default 23, or 992 if --ssl is given",
                 "--ssl       Use SSL/TLS. Known issue: hangs mid-handshake in this build - use plain port 23",
                 "--wide      Request the 27x132 extended screen size instead of 24x80 - the host has to support/grant it too; silently stays 24x80 if it doesn't",
+                "--codepage  Host code page (EBCDIC CCSID) used to decode screens and encode typed text, e.g. 420 for Arabic, 424 for Hebrew. Default: the FIVE250_CODEPAGE env var if set, else 37 (US English). A host in another code page shows as garbage accented letters until this matches it",
                 "--session   Session id, for running multiple concurrent sessions. Default 'default'"
             ),
             List.of(
                 "five250 connect --host pub400.com --port 23",
+                "five250 connect --host myibmi.example.com --codepage 420",
                 "five250 connect --host pub400.com --session second"
             )
         ));
@@ -76,6 +78,24 @@ public final class HelpText {
                 "--session   Session id to read. Default 'default'"
             ),
             List.of("five250 screen", "five250 screen --json | jq .cursor")
+        ));
+
+        ENTRIES.put("screenshot", new Entry(
+            "Save a PNG picture of the current screen",
+            "five250 screenshot [--out <file.png>] [--session <id>]",
+            "Renders the live screen buffer as a terminal-style PNG image (character grid, input "
+                + "fields underlined, cursor block, a status line with cursor position and keyboard "
+                + "state). The image is drawn by the daemon from the buffer itself, not captured "
+                + "from a window, so it works with no browser open, in headless suite/script runs, "
+                + "and on a machine with no display. Inside a suite use the `screenshot` action "
+                + "(value = image name); inside a script call screenshot(name) - both write to the "
+                + "project's screenshots/ folder when the run ends.",
+            List.of(
+                "--out       File to write. A relative path is relative to the current directory. Default: screenshots/<session>.<timestamp>.png in the active project",
+                "--json      Print the raw JSON response (path, bytes) instead of 'Saved <path>'",
+                "--session   Session id to capture. Default 'default'"
+            ),
+            List.of("five250 screenshot", "five250 screenshot --out signon.png")
         ));
 
         ENTRIES.put("fields", new Entry(

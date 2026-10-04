@@ -63,6 +63,11 @@ public final class ScenarioResult {
      * value is either a single String (one field) or a List&lt;String&gt; (a "rows:" range, one
      * entry per line pulled off a subfile/list screen). */
     public final Map<String, Object> extracted = new LinkedHashMap<>();
+    /** PNG images captured on purpose (the "screenshot" action / a script's screenshot() call),
+     * keyed by the name the step gave them. Held in memory until the run's artifacts are written
+     * (ScenarioRunner.writeScreenshots) - a later capture under the same name replaces the
+     * earlier one, same "last one wins" rule a repeated extract name follows. */
+    public final Map<String, byte[]> screenshots = new LinkedHashMap<>();
     public Map<String, Object> screenOnFailure;
     public String error;
 
@@ -73,6 +78,12 @@ public final class ScenarioResult {
     /** Records a value pulled off a screen, e.g. via the "extract" action — structured output, not a check. */
     public ScenarioResult extract(String name, String value) {
         extracted.put(name, value == null ? "" : value);
+        return this;
+    }
+
+    /** Records a rendered PNG of the screen under a name, e.g. via the "screenshot" action. */
+    public ScenarioResult screenshot(String name, byte[] png) {
+        screenshots.put(name, png);
         return this;
     }
 
@@ -121,6 +132,7 @@ public final class ScenarioResult {
         for (Check c : checks) checkMaps.add(c.toMap());
         m.put("checks", checkMaps);
         m.put("extracted", extracted);
+        if (!screenshots.isEmpty()) m.put("screenshots", new ArrayList<>(screenshots.keySet()));
         if (screenOnFailure != null) m.put("screen", screenOnFailure);
         List<Object> stepMaps = new ArrayList<>();
         for (Step s : steps) stepMaps.add(s.toMap());

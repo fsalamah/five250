@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Executes one "type"/"key"/"check"/"wait"/"disconnect"/"extract" row against a live Terminal.
+ * Executes one "type"/"key"/"check"/"wait"/"disconnect"/"extract"/"screenshot" row against a live Terminal.
  * Shared by GenericStepFlow (CSV-driven execution, including its "if"/"loop" interpreter) and
  * JsSuiteRunner (JS-orchestrated execution) so both drive the terminal through identical logic -
  * no behavior duplicated or allowed to drift between the two authoring styles.
@@ -82,6 +82,16 @@ final class StepActions {
             case "disconnect":
                 t.disconnect();
                 break;
+            case "screenshot": {
+                // value = the image's name (target accepted too, for a row that put it there);
+                // blank falls back to "step<N>" so a bare "screenshot" row still produces a file.
+                // No waitUntilInputAllowed() here on purpose: a screenshot is often wanted
+                // precisely BECAUSE the screen is in an odd state (locked on an error), and the
+                // previous step's own waitReady() has already let a normal screen settle.
+                String name = !value.isBlank() ? value.trim() : !target.isBlank() ? target : "step" + stepNo;
+                result.screenshot(HttpApi.safeName(name), ScreenImage.png(t.snapshot()));
+                break;
+            }
             case "extract": {
                 if (value.isBlank()) {
                     throw new RuntimeException("extract step needs an output field name in 'value', at step " + stepNo);
@@ -108,7 +118,7 @@ final class StepActions {
             }
             default:
                 throw new RuntimeException("Unknown action '" + action + "' at step " + stepNo
-                    + " (expected type, key, check, extract, wait, or disconnect)");
+                    + " (expected type, key, check, extract, screenshot, wait, or disconnect)");
         }
 
         try {

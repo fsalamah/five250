@@ -145,6 +145,26 @@ overrides that file's saved `.vars.csv` values for this run only.
 - Use **plain telnet, port 23** (`--host pub400.com --port 23`). SSL (`--ssl`,
   port 992) currently hangs during the TLS handshake in this tn5250j build —
   do not use it until that's debugged.
+- **Host code page** (`Terminal.resolveCodePage`): `connect --codepage <ccsid>`
+  sets the EBCDIC code page used to decode every screen and encode everything
+  typed. Default is the `FIVE250_CODEPAGE` env var if set, else CCSID 37 (US
+  English) - so a host in any other code page shows as garbage accented Latin
+  until this matches it (an Arabic CCSID 420 host read as 37 turns `رقم` into
+  `ÍÝ]`). Every connect path takes it: CLI `--codepage 420`, the GUI's "Code
+  page" box, a suite `connect` row's `expected` cell (`codepage=420`, or
+  `true;codepage=420` with SSL), a script's `connect(host, port, ssl, 420)`,
+  and RPC `"codepage"`. tn5250j has built-in tables for a fixed list (37, 273,
+  277, 278, 280, 284, 285, 297, 424, 500, 870, 871, 875, 1025, 1026, 1112,
+  1140, 1141, 1147, 1148); anything else, Arabic 420 included, goes through
+  the JDK charset of that number, which lives in the `jdk.charsets` module -
+  on the jlink module list in `pom.xml` for exactly this reason. tn5250j
+  silently falls back to 37 for a name it can't resolve, so `resolveCodePage`
+  rejects an unknown one up front with a clear error instead. Verified against
+  a local fake 5250 host sending CCSID 420 bytes (decode, typing Arabic back,
+  suite, script, env default, through the jlink'd dist) - NOT yet against a
+  real Arabic IBM i; PUB400 can't exercise it. Not handled: right-to-left
+  layout and Arabic letter joining in the GUI grid - characters appear in the
+  cell order the host sent them.
 - Credentials come from environment variables you set yourself in your own shell
   (`PUB400_USER`, `PUB400_PASS`) — never write a literal password into a spec
   file, prompt, or commit.
@@ -230,7 +250,7 @@ target/five250.jar connect ...` call brings both up). Three tabs:
 1. **Pure CSV, no code (`custom-steps` flow)** — this is the one to reach for
    first. Each scenario is a group of rows sharing a `case` id, executed in
    `step` order:
-   `case, step, id, action(type|key|check|extract|include|connect|wait|disconnect), target, value, expected`.
+   `case, step, id, action(type|key|check|extract|screenshot|include|connect|wait|disconnect), target, value, expected`.
    `id` is optional and blank on most rows — freeform, unique across the
    whole file — its only use is letting a `project/scripts/*.js` script
    address a range by name instead of raw row position (see `.steps(a, b)`
@@ -639,6 +659,34 @@ method signature; whoever starts the run thread installs the listener via
 The HTTP API (`HttpApi.java`) is a thin JSON wrapper: `/api/rpc` mirrors the
 TCP protocol 1:1 (`SessionService.handle`), so the GUI and the CLI drive the
 exact same session logic — no duplicated navigation code anywhere.
+
+## Screenshots
+
+`ScreenImage.png(snapshot)` draws a `Terminal.snapshot()` map to a
+terminal-style PNG: character grid, input fields underlined, cursor block,
+and a status line (size, cursor, keyboard state). There is no terminal window
+anywhere in this stack to capture, so it is always rendered off-screen into a
+`BufferedImage` from the buffer - which is why it works the same with no
+browser open, in a GUI "Headless" run, from the CLI/CI, and under
+`java.awt.headless=true` (verified by forcing that flag on the daemon).
+Four ways in, one renderer:
+
+- CLI: `five250 screenshot [--out file.png] [--session id]` - `--out` is
+  relative to the caller's directory; default is
+  `screenshots/<session>.<timestamp>.png` in the active project.
+- Suite step: `action=screenshot`, `value` = image name (default `step<N>`).
+- Script: `screenshot(name?)`.
+- GUI: the Terminal tab's Screenshot button (`GET /api/screenshot?sessionId=`
+  returns `image/png`; `download=1` adds a file name).
+
+Suite and script captures are held on the `ScenarioResult` and written with
+the rest of the run's artifacts (`HttpApi.writeRunArtifacts`) to
+`screenshots/<flow>/<file>.<name>.png` plus a timestamped copy
+(`screenshots/scripts/<script>.<name>.png` for a script), same naming scheme
+as `extracted/`. Each character is drawn in its own cell so columns stay
+aligned whatever font a glyph falls back to; the cost is that Arabic letters
+are drawn unjoined, in host cell order. No colors/attributes - the buffer
+doesn't expose them (see Known limitations).
 
 ## CLI help and shell completion
 

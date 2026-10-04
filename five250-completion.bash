@@ -13,7 +13,7 @@ _five250_complete() {
   cword=$COMP_CWORD
   cur="${COMP_WORDS[COMP_CWORD]}"
 
-  local commands="connect signon screen fields type key disconnect shutdown help daemon run-suite"
+  local commands="connect signon screen screenshot fields type key disconnect shutdown help daemon run-suite"
   local keys="ENTER PF1 PF2 PF3 PF4 PF5 PF6 PF7 PF8 PF9 PF10 PF11 PF12 PF13 PF14 PF15 PF16 PF17 PF18 PF19 PF20 PF21 PF22 PF23 PF24 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 PA1 PA2 PA3 PAGE_UP PAGE_DOWN PAGEUP PAGEDOWN ROLL_UP ROLL_DOWN TAB BACK_TAB HOME END_OF_FIELD ERASE_EOF ERASE_FIELD CLEAR HELP SYSREQ ATTN"
 
   if [[ $cword -eq 1 ]]; then
@@ -41,10 +41,11 @@ _five250_complete() {
 
   local opts=""
   case "$subcmd" in
-    connect)    opts="--host --port --ssl --session" ;;
+    connect)    opts="--host --port --ssl --wide --codepage --session" ;;
     signon)     opts="--user --pass --session" ;;
     screen)     opts="--json --session" ;;
     fields)     opts="--json --session" ;;
+    screenshot) opts="--out --json --session" ;;
     type)       opts="--label --row --col --value --session" ;;
     disconnect) opts="--session" ;;
     run-suite)  opts="--flow --file --session --var --timeout" ;;

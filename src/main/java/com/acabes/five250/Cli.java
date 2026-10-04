@@ -86,6 +86,7 @@ public final class Cli {
                 req.put("port", Long.parseLong(opts.getOrDefault("port", opts.containsKey("ssl") ? "992" : "23")));
                 req.put("ssl", opts.containsKey("ssl"));
                 req.put("wide", opts.containsKey("wide"));
+                if (opts.containsKey("codepage")) req.put("codepage", opts.get("codepage"));
                 break;
             case "signon":
                 req.put("cmd", "signon");
@@ -100,6 +101,13 @@ public final class Cli {
             case "fields":
                 req.put("cmd", "fields");
                 req.put("sessionId", session);
+                break;
+            case "screenshot":
+                req.put("cmd", "screenshot");
+                req.put("sessionId", session);
+                // Resolved against THIS process's working directory - the daemon's own cwd is
+                // wherever it was first started from, not where the user is standing now.
+                if (opts.containsKey("out")) req.put("path", new File(opts.get("out")).getAbsolutePath());
                 break;
             case "type":
                 req.put("cmd", "type");
@@ -152,6 +160,10 @@ public final class Cli {
     private static void render(String cmd, Map<String, Object> resp) {
         if (cmd.equals("fields")) {
             renderFields((List<Object>) resp.get("fields"));
+            return;
+        }
+        if (cmd.equals("screenshot")) {
+            System.out.println("Saved " + resp.get("path"));
             return;
         }
         if (resp.containsKey("text")) {

@@ -30,7 +30,7 @@ import java.util.concurrent.TimeoutException;
  * under a "scripts" pseudo-flow bucket (see HttpApi.handleScriptsRun).
  *
  * Globals bound into the script:
- *   - {@code connect(host, port, ssl)} - creates this run's session from scratch (same underlying
+ *   - {@code connect(host, port, ssl, codepage)} - creates this run's session from scratch (same underlying
  *     call the Terminal tab's Connect button and a suite's "connect" row make), a no-op if the
  *     session already exists and is actually connected. A script is self-contained by default -
  *     the generated new-script template always opens with this - but calling it is optional: a
@@ -167,6 +167,7 @@ final class JsSuiteRunner {
                 bindings.putMember("disconnect", (ProxyExecutable) args -> { sessionService.disconnect(sessionId); return null; });
                 bindings.putMember("execute", (ProxyExecutable) args ->
                     executeRange(sessionService, sessionId, result, scriptName, args, stepDelayMs));
+                bindings.putMember("screenshot", (ProxyExecutable) args -> screenshot(sessionService, sessionId, result, args));
                 bindings.putMember("importSuite", (ProxyExecutable) args -> importSuite(suitesRoot, args));
                 bindings.putMember("saveJson", (ProxyExecutable) args -> saveJson(extractedRoot, scriptName, args));
                 bindings.putMember("saveCsv", (ProxyExecutable) args -> saveCsv(extractedRoot, scriptName, args));
@@ -213,6 +214,12 @@ final class JsSuiteRunner {
         String host = args[0].asString();
         long port = args.length > 1 && args[1].fitsInLong() ? args[1].asLong() : 23;
         boolean ssl = args.length > 2 && args[2].isBoolean() && args[2].asBoolean();
+        // Optional 4th argument: host code page (EBCDIC CCSID) as a number or string - 420 or "420".
+        String codePage = null;
+        if (args.length > 3) {
+            if (args[3].isString()) codePage = args[3].asString();
+            else if (args[3].fitsInLong()) codePage = String.valueOf(args[3].asLong());
+        }
 
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("cmd", "connect");
@@ -220,10 +227,28 @@ final class JsSuiteRunner {
         req.put("host", host);
         req.put("port", port);
         req.put("ssl", ssl);
+        if (codePage != null) req.put("codepage", codePage);
         Map<String, Object> resp = sessionService.handle(req);
         if (!Boolean.TRUE.equals(resp.get("ok"))) {
             throw new RuntimeException("connect() failed: " + resp.get("error"));
         }
+        return null;
+    }
+
+    /** screenshot(name?) - renders the live screen to a PNG (ScreenImage) and hands it to the
+     * run's result, which HttpApi.writeRunArtifacts writes out as
+     * screenshots/scripts/<script>.<name>.png when the run ends - the same path a suite's own
+     * "screenshot" step takes, so both end up in one place under one naming scheme. */
+    private static Object screenshot(SessionService sessionService, String sessionId, ScenarioResult result, Value[] args) {
+        String name = args.length > 0 && args[0].isString() && !args[0].asString().isBlank()
+            ? args[0].asString() : "screenshot";
+        Terminal t;
+        try {
+            t = sessionService.getSession(sessionId);
+        } catch (RuntimeException e) {
+            throw new RuntimeException("screenshot() needs a live session - call connect(host, port) first: " + e.getMessage());
+        }
+        result.screenshot(HttpApi.safeName(name), ScreenImage.png(t.snapshot()));
         return null;
     }
 

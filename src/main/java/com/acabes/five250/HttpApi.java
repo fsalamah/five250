@@ -57,6 +57,7 @@ public final class HttpApi {
         server.createContext("/api/scripts/run", this::handleScriptsRun);
         server.createContext("/api/scripts/source", this::handleScriptsSource);
         server.createContext("/api/scripts", this::handleScripts);
+        server.createContext("/api/screenshot", this::handleScreenshot);
         server.createContext("/", this::handleStatic);
 
         server.start();
@@ -460,11 +461,16 @@ public final class HttpApi {
             LocalDateTime.parse(ts, RUN_TIMESTAMP).toString(), results.size());
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, null, results);
         ScenarioRunner.writeExtractedDumps(extractedDir, fileName, ts, results);
+        File screenshotsDir = new File(new File(project.root, "screenshots"), flowName);
+        ScenarioRunner.writeScreenshots(screenshotsDir, fileName, null, results);
+        ScenarioRunner.writeScreenshots(screenshotsDir, fileName, ts, results);
     }
 
     /**
      * If a suite has a row with action="connect" (custom-steps: target=host, value=port,
-     * expected="true" for SSL), and the session doesn't already exist, connects it — so a
+     * expected="true" for SSL and/or "codepage=<ccsid>" for a non-default host code page,
+     * ';'-separated when both: "true;codepage=420"), and the session doesn't already exist,
+     * connects it — so a
      * suite can create its own session from scratch, no prior manual Connect click needed.
      * Either way, strips every row belonging to that row's case, so it never reaches a Flow
      * as an unrecognized action.
@@ -499,7 +505,19 @@ public final class HttpApi {
             } catch (NumberFormatException e) {
                 throw new RuntimeException("connect step's value must be a port number, got: " + connectRow.get("value"));
             }
-            boolean ssl = "true".equalsIgnoreCase(connectRow.getOrDefault("expected", "").trim());
+            boolean ssl = false;
+            String codePage = null;
+            for (String token : connectRow.getOrDefault("expected", "").split("[;,\\s]+")) {
+                if (token.isEmpty()) continue;
+                if (token.equalsIgnoreCase("true") || token.equalsIgnoreCase("ssl")) {
+                    ssl = true;
+                } else if (token.toLowerCase().startsWith("codepage=")) {
+                    codePage = token.substring("codepage=".length());
+                } else {
+                    throw new RuntimeException("connect step's expected must be blank, \"true\" (SSL), "
+                        + "\"codepage=<ccsid>\", or both separated by ';' - got: " + connectRow.get("expected"));
+                }
+            }
 
             Map<String, Object> connectReq = new LinkedHashMap<>();
             connectReq.put("cmd", "connect");
@@ -507,6 +525,7 @@ public final class HttpApi {
             connectReq.put("host", host);
             connectReq.put("port", port);
             connectReq.put("ssl", ssl);
+            if (codePage != null) connectReq.put("codepage", codePage);
             Map<String, Object> resp = sessionService.handle(connectReq);
             if (!Boolean.TRUE.equals(resp.get("ok"))) {
                 throw new RuntimeException("auto-connect failed: " + resp.get("error"));
@@ -640,11 +659,18 @@ public final class HttpApi {
      * so there's nothing to regenerate per script and nothing to keep in sync on disk. */
     private static final String SCRIPT_DECLARATIONS =
         "/** Creates this run's session (no-op if already connected). Same call the Terminal tab's\n"
-        + " *  Connect button and a suite's \"connect\" row make. port defaults to 23, ssl to false. */\n"
-        + "declare function connect(host: string, port?: number, ssl?: boolean): void;\n"
+        + " *  Connect button and a suite's \"connect\" row make. port defaults to 23, ssl to false.\n"
+        + " *  codepage is the host's EBCDIC CCSID (e.g. 420 for Arabic); default is the\n"
+        + " *  FIVE250_CODEPAGE env var if set, else 37 (US English). */\n"
+        + "declare function connect(host: string, port?: number, ssl?: boolean, codepage?: number | string): void;\n"
         + "/** Closes and deregisters this run's session. */\n"
         + "declare function disconnect(): void;\n"
         + "declare function execute(range: unknown): void;\n"
+        + "/** Saves a PNG picture of the current 5250 screen to\n"
+        + " *  screenshots/scripts/<script name>.<name>.png (plus a timestamped copy per run).\n"
+        + " *  Drawn from the screen buffer, so it works in headless runs too. name defaults to\n"
+        + " *  \"screenshot\". */\n"
+        + "declare function screenshot(name?: string): void;\n"
         + "type Suite = {\n"
         + "  /** Live-bound to that suite's own ${NAME} values - read after an execute() extract, or set before one. */\n"
         + "  vars: { [name: string]: string };\n"
@@ -991,6 +1017,33 @@ public final class HttpApi {
             rows.add(row);
         }
         return rows;
+    }
+
+    // ---------- /api/screenshot : the live screen as a PNG, straight in the response body ----------
+
+    /** GET /api/screenshot?sessionId=<id>[&download=1] - the current screen rendered by
+     * ScreenImage, returned as image/png rather than written to disk (that's what the "screenshot"
+     * RPC/CLI command is for). download=1 adds a Content-Disposition so a browser saves it under
+     * a timestamped name instead of navigating to it. */
+    private void handleScreenshot(HttpExchange ex) throws IOException {
+        try {
+            Map<String, String> query = parseQuery(ex.getRequestURI().getQuery());
+            String sessionId = query.getOrDefault("sessionId", "default");
+            byte[] png = ScreenImage.png(sessionService.getSession(sessionId).snapshot());
+            ex.getResponseHeaders().set("Content-Type", "image/png");
+            ex.getResponseHeaders().set("Cache-Control", "no-store");
+            if (query.containsKey("download")) {
+                String name = safeName(sessionId).replaceAll("[^A-Za-z0-9._-]", "_") + "."
+                    + LocalDateTime.now().format(RUN_TIMESTAMP) + ".png";
+                ex.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + name + "\"");
+            }
+            ex.sendResponseHeaders(200, png.length);
+            try (java.io.OutputStream os = ex.getResponseBody()) {
+                os.write(png);
+            }
+        } catch (Throwable e) {
+            sendJson(ex, 200, SessionService.errorResponse(e));
+        }
     }
 
     // ---------- static files (the GUI itself) ----------

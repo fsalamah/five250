@@ -6,7 +6,7 @@
 
   <groupId>com.acabes</groupId>
   <artifactId>five250</artifactId>
-  <version>1.3.1</version>
+  <version>1.4.0</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -115,7 +115,7 @@
                   <arg value="--module-path"/>
                   <arg value="${java.home}/jmods"/>
                   <arg value="--add-modules"/>
-                  <arg value="java.base,java.desktop,java.prefs,java.sql,java.logging,java.naming,jdk.httpserver,jdk.internal.vm.ci,jdk.jfr,jdk.management,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki"/>
+                  <arg value="java.base,java.desktop,java.prefs,java.sql,java.logging,java.naming,jdk.httpserver,jdk.internal.vm.ci,jdk.jfr,jdk.management,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.charsets"/>
                   <arg value="--output"/>
                   <arg value="${project.build.directory}/dist/runtime"/>
                   <arg value="--strip-debug"/>

@@ -346,8 +346,10 @@
         <label>Port</label><input id="port" autocomplete="off" value="23" style="width:60px">
         <label><input type="checkbox" id="ssl"> SSL</label>
         <label title="Requests the 27x132 extended screen size instead of 24x80 - the host has to support/grant it too; silently stays 24x80 if it doesn't"><input type="checkbox" id="wide" checked> Wide (132 col)</label>
+        <label title="Host code page (EBCDIC CCSID) used to decode screens and encode typed text - e.g. 420 for Arabic, 424 for Hebrew. Blank = the FIVE250_CODEPAGE env var if set, else 37 (US English). A host in another code page shows as garbage accented letters until this matches it.">Code page</label><input id="codepage" autocomplete="off" placeholder="37" style="width:54px">
         <button class="primary" id="btnConnect">Connect</button>
         <button class="danger" id="btnDisconnect">Disconnect</button>
+        <button id="btnScreenshot" title="Download a PNG picture of the current screen. Rendered by the daemon from the screen buffer, so the same image is available from the CLI (five250 screenshot), a suite's screenshot step and a script's screenshot() call - including headless runs.">Screenshot</button>
         <button id="btnImmersive" title="Full keyboard fidelity: arrow keys move the cursor field-to-field, fullscreen, browser shortcuts suppressed">⛶ Immersive</button>
       </div>
       <div class="row">
@@ -778,8 +780,9 @@ const ACTION_ITEMS = [
   { name: "key", description: "Send an AID key. value: ENTER, F3, TAB, PAGEDOWN, ... (this row's target is unused)." },
   { name: "check", description: "Assert on-screen text. target: label:<text>, row:<n>, or message. expected: substring to match." },
   { name: "extract", description: "Pull a value into results. target: label:<text>, row:<n>, message, rows:<start>-<end>[:<colStart>-<colEnd>] (raw text per row), or table:<start>-<end>[:<colStart>-<colEnd>] (auto-splits each row into columns). value: output field name." },
+  { name: "screenshot", description: "Save a PNG picture of the screen as it is at this step, to screenshots/<flow>/<file>.<name>.png. value: image name (default step<N>). Works in headless runs." },
   { name: "include", description: "Splice in another scenario file's steps here. target: file name (no .csv)." },
-  { name: "connect", description: "Open a session (put alone in its own case, e.g. \"setup\"). target: host. value: port (default 23). expected: \"true\" for SSL." },
+  { name: "connect", description: "Open a session (put alone in its own case, e.g. \"setup\"). target: host. value: port (default 23). expected: \"true\" for SSL, \"codepage=420\" for a non-default host code page (e.g. Arabic), or both as \"true;codepage=420\"." },
   { name: "wait", description: "Sleep N seconds (capped 120) for something outside the 5250 buffer. value: seconds." },
   { name: "disconnect", description: "Close the session outright. target/value/expected unused." },
 ];
@@ -2001,7 +2004,7 @@ $("replayClose").addEventListener("click", () => $("replayBackdrop").classList.r
 
 $("btnConnect").addEventListener("click", async () => {
   try {
-    const resp = await rpc("connect", { host: $("host").value, port: parseInt($("port").value, 10), ssl: $("ssl").checked, wide: $("wide").checked });
+    const resp = await rpc("connect", { host: $("host").value, port: parseInt($("port").value, 10), ssl: $("ssl").checked, wide: $("wide").checked, codepage: $("codepage").value.trim() });
     renderScreen(resp); toast("Connected");
   } catch (e) {}
 });
@@ -2014,7 +2017,7 @@ function saveConnSettings() {
   try {
     localStorage.setItem(CONN_SETTINGS_KEY, JSON.stringify({
       sessionId: $("sessionId").value, host: $("host").value, port: $("port").value,
-      ssl: $("ssl").checked, wide: $("wide").checked, user: $("user").value
+      ssl: $("ssl").checked, wide: $("wide").checked, codepage: $("codepage").value, user: $("user").value
     }));
   } catch (e) { /* localStorage unavailable (private mode, etc.) - just don't persist */ }
 }
@@ -2027,10 +2030,31 @@ function restoreConnSettings() {
   if (s.port) $("port").value = s.port;
   if (typeof s.ssl === "boolean") $("ssl").checked = s.ssl;
   if (typeof s.wide === "boolean") $("wide").checked = s.wide;
+  if (s.codepage) $("codepage").value = s.codepage;
   if (s.user) $("user").value = s.user;
 }
-["sessionId", "host", "port", "ssl", "wide", "user"].forEach(id => $(id).addEventListener("change", saveConnSettings));
+["sessionId", "host", "port", "ssl", "wide", "codepage", "user"].forEach(id => $(id).addEventListener("change", saveConnSettings));
 restoreConnSettings();
+
+$("btnScreenshot").addEventListener("click", async () => {
+  // Fetched first rather than just navigating to the URL: a session that isn't connected
+  // answers with a JSON error, which should surface as a toast, not a downloaded .json file.
+  const sid = $("sessionId").value || "default";
+  try {
+    const res = await fetch("/api/screenshot?download=1&sessionId=" + encodeURIComponent(sid));
+    if ((res.headers.get("Content-Type") || "").indexOf("image/png") !== 0) {
+      const err = await res.json().catch(() => ({}));
+      toast("Error: " + (err.error || "could not take a screenshot"));
+      return;
+    }
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = match ? match[1] : sid + ".png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { toast("Error: could not take a screenshot"); }
+});
 
 $("btnDisconnect").addEventListener("click", async () => {
   try { await rpc("disconnect"); $("screen").textContent = "(not connected)"; $("oiaLine").textContent = "";
