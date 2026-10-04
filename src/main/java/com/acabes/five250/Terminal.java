@@ -407,10 +407,7 @@ public final class Terminal {
         requireConnected();
         String text = new String(screen.getScreenAsChars());
         int cols = screen.getColumns();
-        int idx = text.indexOf(label);
-        if (idx < 0) {
-            idx = text.toUpperCase().indexOf(label.toUpperCase());
-        }
+        int idx = indexOfLabel(text, label);
         if (idx < 0) {
             throw new RuntimeException("Label not found on screen: " + label);
         }
@@ -471,6 +468,20 @@ public final class Terminal {
         return i > 0 && text.charAt(i) == ' ' && text.charAt(i - 1) == ' ';
     }
 
+    /** Where a label sits in the screen buffer: exact match, then case-insensitive, then - for a
+     * right-to-left label typed normally (reading order) - its cell-order form, searched in a
+     * copy of the buffer with Arabic presentation forms folded to plain letters. Every variant
+     * is the same length as the label, so the index is a real screen position either way. See
+     * Bidi for why the buffer holds such text back to front. */
+    private static int indexOfLabel(String text, String label) {
+        int idx = text.indexOf(label);
+        if (idx < 0) idx = text.toUpperCase().indexOf(label.toUpperCase());
+        if (idx < 0 && Bidi.hasRtl(label)) {
+            idx = Bidi.foldPresentationForms(text).indexOf(Bidi.toVisual(label));
+        }
+        return idx;
+    }
+
     private static int countOccurrences(String haystack, String needle) {
         int count = 0, from = 0;
         while (true) {
@@ -485,10 +496,7 @@ public final class Terminal {
     private ScreenField findFieldRightOfLabel(String label) {
         String text = new String(screen.getScreenAsChars());
         int cols = screen.getColumns();
-        int idx = text.indexOf(label);
-        if (idx < 0) {
-            idx = text.toUpperCase().indexOf(label.toUpperCase());
-        }
+        int idx = indexOfLabel(text, label);
         if (idx < 0) return null;
 
         int labelEndPos = idx + label.length();

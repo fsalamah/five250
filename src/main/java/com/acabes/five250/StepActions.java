@@ -192,7 +192,13 @@ final class StepActions {
         }
     }
 
+    /** Text read off the screen for a check/extract, in reading order - the buffer itself holds
+     * right-to-left text in cell (visual) order; see Bidi. */
     static String doCheck(Terminal t, String target) {
+        return Bidi.toLogical(readTarget(t, target));
+    }
+
+    private static String readTarget(Terminal t, String target) {
         if (target.equalsIgnoreCase("message")) return t.messageLine();
         if (target.startsWith("label:")) return t.readAfterLabel(target.substring(6));
         if (target.startsWith("row:")) return t.rowText(Integer.parseInt(target.substring(4).trim()));
@@ -232,7 +238,9 @@ final class StepActions {
 
         List<String> out = new ArrayList<>();
         for (int r = rowRange[0]; r <= rowRange[1]; r++) {
-            out.add(colRange != null ? t.rowText(r, colRange[0], colRange[1]) : t.rowText(r));
+            // Sliced by screen column first, converted to reading order second - a column
+            // range is a statement about cells, so it has to be applied to cell order.
+            out.add(Bidi.toLogical(colRange != null ? t.rowText(r, colRange[0], colRange[1]) : t.rowText(r)));
         }
         return out;
     }
@@ -259,7 +267,17 @@ final class StepActions {
         for (int r = rowRange[0]; r <= rowRange[1]; r++) {
             rawRows.add(t.rowTextRaw(r, colStart, colEnd));
         }
-        return splitIntoColumns(rawRows);
+        // Column boundaries are detected on the raw cell-order rows; each resulting cell is then
+        // converted to reading order on its own, so columns keep their on-screen left-to-right
+        // positions while the text inside each one reads correctly.
+        List<List<String>> table = splitIntoColumns(rawRows);
+        List<List<String>> out = new ArrayList<>();
+        for (List<String> row : table) {
+            List<String> cells = new ArrayList<>();
+            for (String cell : row) cells.add(Bidi.toLogical(cell));
+            out.add(cells);
+        }
+        return out;
     }
 
     /** A single blank column isn't a reliable column boundary on its own — a "Label . . . :

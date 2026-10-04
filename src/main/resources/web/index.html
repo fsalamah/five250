@@ -141,6 +141,14 @@
     padding: 14px; border-radius: 0; white-space: pre; overflow-x: auto; border: 1px solid var(--border);
     min-height: 340px; box-shadow: inset 0 1px 4px rgba(0,0,0,.5);
   }
+  /* A 5250 screen is a grid of cells shown strictly left to right - the host has already laid
+     right-to-left text (Arabic, Hebrew) out in display order. Left alone, the browser's own bidi
+     algorithm reorders such a run a second time and the word comes out reversed, so every screen
+     grid turns that off. Each non-Latin character also gets its own fixed-width cell (.gc): the
+     fallback font those glyphs come from isn't monospaced, and letters left in one text run
+     would be joined as if the cell order were the reading order. */
+  #screen, #replayScreen, #runningScreen, #scriptRunningScreen { direction: ltr; unicode-bidi: bidi-override; }
+  .gc { display: inline-block; width: 1ch; text-align: center; white-space: pre; }
   #oiaLine { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { border-bottom: 1px solid var(--border-soft); padding: 8px 10px; text-align: left; }
@@ -1395,6 +1403,21 @@ async function refreshSessionVars() {
 // The cursor is rendered INLINE as a span around the actual character at its position, laid out
 // by the same text flow as everything else — not a separately measured/positioned overlay, so
 // it cannot drift out of alignment with the text underneath it.
+// escapeHtml for screen-grid text: same escaping, plus each character outside the basic Latin
+// ranges wrapped in its own fixed-width cell - see the .gc rule's comment.
+function escapeCells(s) {
+  let out = "", plain = "";
+  for (const ch of String(s)) {
+    if (ch.charCodeAt(0) > 0x02FF) {
+      out += escapeHtml(plain) + '<span class="gc">' + escapeHtml(ch) + "</span>";
+      plain = "";
+    } else {
+      plain += ch;
+    }
+  }
+  return out + escapeHtml(plain);
+}
+
 function screenGridHtml(screen) {
   if (!screen || !screen.text) return "(no screen captured)";
   const fieldsByRow = {};
@@ -1412,9 +1435,9 @@ function screenGridHtml(screen) {
     function emit(text, base, openTag, closeTag) {
       if (cursorCol0 >= base && cursorCol0 < base + text.length) {
         const i = cursorCol0 - base;
-        return openTag + escapeHtml(text.slice(0, i)) + `<span class="cursor-block">${escapeHtml(text[i])}</span>` + escapeHtml(text.slice(i + 1)) + closeTag;
+        return openTag + escapeCells(text.slice(0, i)) + `<span class="cursor-block">${escapeCells(text[i])}</span>` + escapeCells(text.slice(i + 1)) + closeTag;
       }
-      return openTag + escapeHtml(text) + closeTag;
+      return openTag + escapeCells(text) + closeTag;
     }
 
     let html = "", pos = 0;

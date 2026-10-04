@@ -162,9 +162,28 @@ overrides that file's saved `.vars.csv` values for this run only.
   rejects an unknown one up front with a clear error instead. Verified against
   a local fake 5250 host sending CCSID 420 bytes (decode, typing Arabic back,
   suite, script, env default, through the jlink'd dist) - NOT yet against a
-  real Arabic IBM i; PUB400 can't exercise it. Not handled: right-to-left
-  layout and Arabic letter joining in the GUI grid - characters appear in the
-  cell order the host sent them.
+  real Arabic IBM i; PUB400 can't exercise it.
+- **Right-to-left text** (`Bidi.java`): a 5250 screen holds Arabic/Hebrew in
+  VISUAL order - one character per cell, left to right as displayed, so a
+  word sits in the buffer back to front. Anything that is a picture of the
+  screen stays in cell order and must not be reordered: the GUI grids turn
+  the browser's bidi off (`unicode-bidi: bidi-override`, each non-Latin
+  character in its own 1ch `.gc` cell) - without that the browser reverses
+  the run a second time, which is the "Arabic appears reversed" symptom -
+  and screenshots, `five250 screen`, `screen --json` and replay snapshots are
+  raw cells too. Anything that is DATA taken off the screen is converted to
+  reading (logical) order: `check`/`extract` values (`row:`, `rows:`,
+  `table:`, `label:`, `message`), therefore a script's `.vars`, `console.log`,
+  `saveJson`, and the results/extracted files. So a `check` row's `expected`
+  and a `label:` target are written normally, as you would type them. Column
+  ranges are applied to cells first, converted second. The conversion
+  reverses each right-to-left run and restores numbers inside it; it is its
+  own inverse and is not the full Unicode bidi algorithm. `FIVE250_BIDI=off`
+  disables it everywhere. Verified against the fake host sending visual-order
+  CCSID 420 text; same for a script and a headless run (it lives in
+  `StepActions`, below the GUI). NOT handled: typing - a `type` value is sent
+  in the order written, so an Arabic value lands in cells in that order; and
+  letter joining - Arabic is shown one unjoined letter per cell.
 - Credentials come from environment variables you set yourself in your own shell
   (`PUB400_USER`, `PUB400_PASS`) — never write a literal password into a spec
   file, prompt, or commit.
